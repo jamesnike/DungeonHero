@@ -1654,9 +1654,9 @@ const starterGuildBloodGold: CardDefinition = {
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered) => {
     const echoTag = isEchoTriggered ? '（回响×2）' : '';
     enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 1 * echoMultiplier, source: 'guild-blood-gold', selfInflicted: true });
-    enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 2 * echoMultiplier, source: 'guild-blood-gold' });
-    log(sideEffects, 'magic', `血金术：受到 ${1 * echoMultiplier} 点伤害，获得 ${2 * echoMultiplier} 金币`);
-    banner(sideEffects, `血金术：以 ${1 * echoMultiplier} 点生命换取 ${2 * echoMultiplier} 金币。${echoTag}`);
+    enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 3 * echoMultiplier, source: 'guild-blood-gold' });
+    log(sideEffects, 'magic', `血金术：受到 ${1 * echoMultiplier} 点伤害，获得 ${3 * echoMultiplier} 金币`);
+    banner(sideEffects, `血金术：以 ${1 * echoMultiplier} 点生命换取 ${3 * echoMultiplier} 金币。${echoTag}`);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);

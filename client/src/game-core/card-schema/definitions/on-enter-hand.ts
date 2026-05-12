@@ -275,6 +275,25 @@ const onHandHeal1: OnEnterHandHandler = (_state, card, _patch, sideEffects, enqu
 };
 
 /**
+ * 赋能神殿 「上手：金币 +2」: each time this card enters hand, gain 2 gold.
+ * Set on `card.onEnterHandEffect = 'on-hand-gold-2'` via the
+ * `on-hand-gold-grant` PermGrant flow. Routed through MODIFY_GOLD so that any
+ * standard hooks (amulet gold-on-X, totals, banners) fire consistently. Flat
+ * +2 per trigger — no scaling/buffs (mirrors `on-hand-heal-1`'s flat +1).
+ */
+const onHandGold2: OnEnterHandHandler = (_state, card, _patch, sideEffects, enqueuedActions) => {
+  enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 2, source: 'on-hand-gold-2' });
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'magic', message: `${card.name} 上手：金币 +2。` },
+  });
+  sideEffects.push({
+    event: 'ui:banner',
+    payload: { text: `${card.name} 上手：+2 金币！` },
+  });
+};
+
+/**
  * 「右翼回响」option 4 上手：随机一个装备栏 +1 临时护甲。
  * Set on `card.onEnterHandEffect = 'event-grant-onhand-temp-armor-1'` via the
  * `on-hand-temp-armor-grant` PermGrant flow. Picks uniformly from {slot1,
@@ -359,5 +378,6 @@ registerOnEnterHandAll([
   { id: 'growth-blade-onhand', handler: growthBladeOnHand },
   { id: 'growth-blade-onhand-x2', handler: growthBladeOnHandX2 },
   { id: 'on-hand-heal-1', handler: onHandHeal1 },
+  { id: 'on-hand-gold-2', handler: onHandGold2 },
   { id: 'event-grant-onhand-temp-armor-1', handler: eventGrantOnHandTempArmor1 },
 ]);

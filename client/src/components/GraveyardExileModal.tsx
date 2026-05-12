@@ -37,15 +37,18 @@ export default function GraveyardExileModal({
 
   return (
     <Dialog open={open}>
-      <DialogContent className="sm:max-w-2xl max-h-[95vh] overflow-y-auto p-5 sm:p-8">
-        <DialogHeader>
+      {/*
+        Layout：flex 列 + 中间区滚动 + footer 固定。详见 CardDeletionModal 同款注释。
+      */}
+      <DialogContent className="sm:max-w-2xl max-h-[95dvh] flex flex-col p-5 sm:p-8">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>{t('modal.graveyardExile.title')}</DialogTitle>
           <DialogDescription>
             {t('modal.graveyardExile.description')}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 flex-1 min-h-0 overflow-y-auto">
           {cards.map(card => {
             const isSelected = selectedIds.has(card.id);
             return (
@@ -72,7 +75,7 @@ export default function GraveyardExileModal({
           })}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-shrink-0">
           <Button
             variant="default"
             onClick={handleConfirm}

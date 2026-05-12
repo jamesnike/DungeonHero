@@ -387,7 +387,7 @@ describe('汰旧迎新 → 回响残页弃回触发 onDiscardDraw', () => {
 // ---------------------------------------------------------------------------
 
 describe('回响行囊 → 回响残页弃回触发 onDiscardDraw', () => {
-  it('回响残页被 回响行囊 弃回 → 进回收袋 + 触发 onDiscardDraw 抽牌', () => {
+  it('回响残页被 回响行囊 弃回（玩家选择）→ 进回收袋 + 触发 onDiscardDraw 抽牌', () => {
     const card = makeEchoBag();
     const echoRem = makeEchoRemnant();
     const f1 = makeFiller('f1', 'Plain');
@@ -398,9 +398,17 @@ describe('回响行囊 → 回响残页弃回触发 onDiscardDraw', () => {
       backpackItems: [bp1, bp2] as any,
       discardedCards: [] as any,
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    // PLAY_CARD 打开 HandDiscardSelectionModal（可弃 2 张 == 必选 2 张，仍弹）
+    let result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect(result.state.pendingHandDiscardSelection).not.toBeNull();
+    expect(result.state.pendingHandDiscardSelection!.subEffect).toBe('echo-bag');
 
-    // 回响残页 必然在被随机弃的两张里（因为只有 2 张可弃）→ 进回收袋
+    // 玩家显式选两张弃回
+    result = drain(result.state, [
+      { type: 'RESOLVE_HAND_DISCARD_SELECTION', cardIds: ['echo-rem-1', 'f1'] } as GameAction,
+    ]);
+
+    // 回响残页（永久）→ 回收袋
     expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'echo-rem-1')).toBeDefined();
     // 普通卡 f1 → 坟场
     expect(result.state.discardedCards.find(c => c.id === 'f1')).toBeDefined();

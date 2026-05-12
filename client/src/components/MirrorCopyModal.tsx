@@ -94,12 +94,15 @@ export default function MirrorCopyModal({
         镜影摹形弹窗：玩家选哪张卡复制是有后果的选择，外点 / ESC 误关会丢失复制机会。
         显式关闭路径："取消" / X / "确认复制"。
       */}
+      {/*
+        Layout：flex 列 + 中间区滚动 + footer 固定。详见 CardDeletionModal 同款注释。
+      */}
       <DialogContent
-        className="sm:max-w-lg max-h-[95vh] overflow-y-auto"
+        className="sm:max-w-lg max-h-[95dvh] flex flex-col"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        <DialogHeader>
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <Copy className="w-5 h-5 text-violet-500" />
             {t('modal.mirrorCopy.title')}
@@ -109,7 +112,7 @@ export default function MirrorCopyModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-2 space-y-4">
+        <div className="mt-2 space-y-4 flex-1 min-h-0 overflow-y-auto">
           {!hasAny ? (
             <div className="text-center py-8 text-muted-foreground">{t('common.noCardsAvailable')}</div>
           ) : (
@@ -173,22 +176,23 @@ export default function MirrorCopyModal({
             </>
           )}
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-border">
-            <Button variant="outline" size="sm" onClick={handleClose}>
-              {hasAny ? t('common.cancel') : t('common.close')}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-border flex-shrink-0">
+          <Button variant="outline" size="sm" onClick={handleClose}>
+            {hasAny ? t('common.cancel') : t('common.close')}
+          </Button>
+          {hasAny && (
+            <Button
+              size="sm"
+              disabled={!selected}
+              onClick={handleConfirm}
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+            >
+              <Copy className="w-4 h-4 mr-1" />
+              {t('modal.mirrorCopy.confirmCopy')}
             </Button>
-            {hasAny && (
-              <Button
-                size="sm"
-                disabled={!selected}
-                onClick={handleConfirm}
-                className="bg-violet-600 hover:bg-violet-700 text-white"
-              >
-                <Copy className="w-4 h-4 mr-1" />
-                {t('modal.mirrorCopy.confirmCopy')}
-              </Button>
-            )}
-          </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

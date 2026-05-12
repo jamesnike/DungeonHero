@@ -2442,7 +2442,7 @@ export default function GameBoard() {
     let rng = engine.getState().rng;
     const [target, rng2] = pickRandom(monsters, rng); rng = rng2;
     dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
-    const dmg = Math.max(0, 1 + permanentSpellDamageBonus);
+    const dmg = Math.max(0, 3 + permanentSpellDamageBonus);
 
     discardShockSeqInFlightRef.current = true;
     const started = tryStartDiscardShockFlight(target.id, dmg, 2, showBanner);
@@ -6726,8 +6726,17 @@ export default function GameBoard() {
           const bump = amuletEffects.monsterEquipBuffCount;
           setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + bump);
           setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + bump);
-          addGameLog('amulet', `驯兽铸印：${monster.name} 装备栏永久攻击 +${bump}，永久护甲 +${bump}！`);
-          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +${bump}，永久护甲 +${bump}！` });
+          let durMsg = '';
+          if (equipCard.durability != null && equipCard.maxDurability != null) {
+            const newDur = Math.min(equipCard.maxDurability, equipCard.durability + bump);
+            const repaired = newDur - equipCard.durability;
+            if (repaired > 0) {
+              setEquipmentSlotById(equipSlot, { ...equipCard, durability: newDur });
+              durMsg = `，耐久 +${repaired}`;
+            }
+          }
+          addGameLog('amulet', `驯兽铸印：${monster.name} 装备栏永久攻击 +${bump}，永久护甲 +${bump}${durMsg}！`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +${bump}，永久护甲 +${bump}${durMsg}！` });
         }
 
         if (monster.monsterType === 'Ogre' || monster.name === 'Ogre') {
@@ -7082,8 +7091,18 @@ export default function GameBoard() {
         const bump = amuletEffects.monsterEquipBuffCount;
         setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + bump);
         setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + bump);
-        addGameLog('amulet', `驯兽铸印：${equipCard.name} 装备栏永久攻击 +${bump}，永久护甲 +${bump}！`);
-        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +${bump}，永久护甲 +${bump}！` });
+        let durMsg = '';
+        if (equipCard.durability != null && equipCard.maxDurability != null) {
+          const newDur = Math.min(equipCard.maxDurability, equipCard.durability + bump);
+          const repaired = newDur - equipCard.durability;
+          if (repaired > 0) {
+            equipCard = { ...equipCard, durability: newDur };
+            setEquipmentSlotById(equipSlot, equipCard);
+            durMsg = `，耐久 +${repaired}`;
+          }
+        }
+        addGameLog('amulet', `驯兽铸印：${equipCard.name} 装备栏永久攻击 +${bump}，永久护甲 +${bump}${durMsg}！`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +${bump}，永久护甲 +${bump}${durMsg}！` });
       }
 
       if (isMonsterFromHand && (card.monsterType === 'Ogre' || card.name === 'Ogre')) {

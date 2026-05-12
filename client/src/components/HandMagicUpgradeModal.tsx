@@ -68,12 +68,15 @@ export default function HandMagicUpgradeModal({
         手牌魔法精炼弹窗（秘法精炼）：玩家选了卡才有意义，外点 / ESC 误关会丢失
         升级机会。和 CardUpgradeModal 同款保护，只允许"取消"按钮 / X / 确认 关闭。
       */}
+      {/*
+        Layout：flex 列 + 中间区滚动 + footer 固定。详见 CardDeletionModal 同款注释。
+      */}
       <DialogContent
-        className="sm:max-w-lg max-h-[95vh] overflow-y-auto"
+        className="sm:max-w-lg max-h-[95dvh] flex flex-col"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        <DialogHeader>
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <ArrowBigUpDash className="w-5 h-5 text-violet-500" />
             {t('modal.handMagicUpgrade.title')}
@@ -83,7 +86,7 @@ export default function HandMagicUpgradeModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-2 space-y-4">
+        <div className="mt-2 flex-1 min-h-0 overflow-y-auto">
           {upgradeableMagics.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               {t('modal.handMagicUpgrade.empty')}
@@ -104,23 +107,23 @@ export default function HandMagicUpgradeModal({
               })}
             </div>
           )}
+        </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-border">
-            <Button variant="outline" size="sm" onClick={handleClose}>
-              {upgradeableMagics.length === 0 ? t('common.close') : t('common.cancel')}
+        <div className="flex justify-end gap-2 pt-2 border-t border-border flex-shrink-0">
+          <Button variant="outline" size="sm" onClick={handleClose}>
+            {upgradeableMagics.length === 0 ? t('common.close') : t('common.cancel')}
+          </Button>
+          {upgradeableMagics.length > 0 && (
+            <Button
+              size="sm"
+              disabled={selectedCardIds.length === 0}
+              onClick={handleConfirm}
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+            >
+              <ArrowBigUpDash className="w-4 h-4 mr-1" />
+              {t('modal.handMagicUpgrade.upgradeWithCount', { count: selectedCardIds.length })}
             </Button>
-            {upgradeableMagics.length > 0 && (
-              <Button
-                size="sm"
-                disabled={selectedCardIds.length === 0}
-                onClick={handleConfirm}
-                className="bg-violet-600 hover:bg-violet-700 text-white"
-              >
-                <ArrowBigUpDash className="w-4 h-4 mr-1" />
-                {t('modal.handMagicUpgrade.upgradeWithCount', { count: selectedCardIds.length })}
-              </Button>
-            )}
-          </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

@@ -143,12 +143,16 @@ export default function CardUpgradeModal({
         这里只允许"取消"按钮 / X 按钮 / 完成升级 三种显式路径关闭，
         阻断 outside-click 与 ESC 路径。
       */}
+      {/*
+        Layout：flex 列 + 中间区滚动 + footer 固定。详见 CardDeletionModal
+        同款注释——避免 mobile 上 95vh 超出可视区 + 按钮被挤到滚动区下方。
+      */}
       <DialogContent
-        className="sm:max-w-lg max-h-[calc(95vh/var(--dialog-zoom,1))] overflow-y-auto"
+        className="sm:max-w-lg max-h-[calc(95dvh/var(--dialog-zoom,1))] flex flex-col"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        <DialogHeader>
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <ArrowBigUpDash className="w-5 h-5 text-emerald-500" />
             {t('modal.cardUpgrade.title')}
@@ -160,7 +164,7 @@ export default function CardUpgradeModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-2 space-y-4">
+        <div className="mt-2 space-y-4 flex-1 min-h-0 overflow-y-auto">
           {!hasUpgradeableCards ? (
             <div className="text-center py-8 text-muted-foreground">
               {t('modal.cardUpgrade.empty')}
@@ -173,25 +177,25 @@ export default function CardUpgradeModal({
               {renderSection(t('common.section.amulet'), upgradeableAmulets)}
             </>
           )}
+        </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-border">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleClose(false)}
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button
-              size="sm"
-              disabled={!selectedCardId || selectedMaxed}
-              onClick={handleConfirm}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              <ArrowBigUpDash className="w-4 h-4 mr-1" />
-              {t('modal.cardUpgrade.upgrade')}
-            </Button>
-          </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-border flex-shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleClose(false)}
+          >
+            {t('common.cancel')}
+          </Button>
+          <Button
+            size="sm"
+            disabled={!selectedCardId || selectedMaxed}
+            onClick={handleConfirm}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            <ArrowBigUpDash className="w-4 h-4 mr-1" />
+            {t('modal.cardUpgrade.upgrade')}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

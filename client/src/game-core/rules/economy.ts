@@ -15,7 +15,7 @@ import type { KnightCardData } from '@/lib/knightDeck';
 import { BASE_BACKPACK_CAPACITY } from '../constants';
 import { markSkillUsedPure } from '../hero';
 import { nextInt } from '../rng';
-import { getEffectiveHandLimit, addCardToBackpackPure } from '../cards';
+import { getEffectiveHandLimit, addCardToBackpackPure, primeMonsterAsEquipment } from '../cards';
 import { computeAmuletEffectsForState, applySlotArmorBonusDelta, refillSlotArmorToCap } from '../equipment';
 import { accumulateMineDamageBoost } from './equipment-effects';
 import { computeSpellDamagePure } from '../helpers';
@@ -1153,10 +1153,11 @@ function reduceResolveGraveyardSelection(
   }
 
   // Monster cards in graveyard had their durability cleared by
-  // resetMonsterForGraveyard. The hand/backpack add-helpers below
-  // (addCardToHand / addCardToBackpackPure) re-prime them as monster
-  // equipment via primeMonsterAsEquipment, matching the persuade flow.
-  const selected: GameCardData = rawSelected;
+  // resetMonsterForGraveyard. Re-prime them as monster equipment via
+  // primeMonsterAsEquipment (matching the persuade / addCardToBackpackPure
+  // flow) so they're equippable from hand/backpack. addCardToBackpackPure
+  // does this internally; the hand branch must do it explicitly.
+  const selected: GameCardData = primeMonsterAsEquipment(rawSelected);
 
   const patch: Partial<GameState> = {};
   patch.discardedCards = state.discardedCards.filter(c => c.id !== cardId);

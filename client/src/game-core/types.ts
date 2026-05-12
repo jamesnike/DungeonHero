@@ -708,7 +708,7 @@ export interface GameState {
    */
   monsterFusionModal: { sourceCardId: string } | null;
   /** 永恒铭刻 / 蜕变赋灵：选择手牌赋予属性 */
-  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'flank-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'flank-heal-grant' | 'transform-recycle-grant' | 'amulet-perm-grant' | 'on-hand-stun-cap-grant' | 'on-hand-heal-grant' | 'on-hand-top-grant' | 'on-hand-temp-armor-grant' | 'flank-gain-bolt-grant' | 'on-hand-add-bolt-bp-grant' | 'flank-spawn-mine-grant' | 'transform-mine-damage-grant' | 'transform-amplify-bolt-grant'; meta?: Record<string, number> } | null;
+  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'flank-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'flank-heal-grant' | 'transform-recycle-grant' | 'amulet-perm-grant' | 'on-hand-stun-cap-grant' | 'on-hand-heal-grant' | 'on-hand-gold-grant' | 'on-hand-top-grant' | 'on-hand-temp-armor-grant' | 'flank-gain-bolt-grant' | 'on-hand-add-bolt-bp-grant' | 'flank-spawn-mine-grant' | 'transform-mine-damage-grant' | 'transform-amplify-bolt-grant'; meta?: Record<string, number> } | null;
   /**
    * 增幅：选择目标进行增幅。
    * - `scope`：'narrow' = 装备栏 + 手牌（默认，主牌堆 增幅 magic 用）；

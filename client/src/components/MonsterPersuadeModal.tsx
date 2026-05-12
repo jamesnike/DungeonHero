@@ -61,8 +61,15 @@ export default function MonsterPersuadeModal({
         外点 / ESC 误关会让 pendingPersuade 状态卡住或丢失。
         显式关闭路径："确认劝降" / "取消" / "确定" / X。
       */}
+      {/*
+        Layout：dvh 替代 vh 让 mobile 浏览器 chrome 不遮按钮。
+        本 modal 内容形态多变（confirm / rolling / result），按钮位置在不同 phase
+        不一样，无法做单一 sticky footer。退而求其次至少把高度限制改成 dvh
+        + 整体 overflow-y-auto 保留——内容短的 phase 不滚动，rolling phase
+        即便 dice + 多行结果仍能滚到底。
+      */}
       <DialogContent
-        className="sm:max-w-md max-h-[95vh] overflow-y-auto persuade-modal"
+        className="sm:max-w-md max-h-[95dvh] overflow-y-auto persuade-modal"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >

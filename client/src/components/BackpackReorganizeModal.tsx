@@ -226,8 +226,11 @@ export default function BackpackReorganizeModal({
         if (!next) handleConfirm();
       }}
     >
-      <DialogContent className="max-w-2xl max-h-[95vh] overflow-y-auto" overlayClassName="bg-black/30">
-        <DialogHeader>
+      {/*
+        Layout：flex 列 + 中间区滚动 + footer 固定。详见 CardDeletionModal 同款注释。
+      */}
+      <DialogContent className="max-w-2xl max-h-[95dvh] flex flex-col" overlayClassName="bg-black/30">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Backpack className="w-5 h-5 text-amber-500" />
             {t('modal.backpackReorganize.title')}
@@ -243,13 +246,13 @@ export default function BackpackReorganizeModal({
           {prompt && <p className="text-[11px] text-muted-foreground italic">{prompt}</p>}
         </DialogHeader>
 
-        <div className="space-y-6 py-2">
+        <div className="space-y-6 py-2 flex-1 min-h-0 overflow-y-auto">
           {renderSection(t('common.section.hand'), handCards, 'hand', c => keyOf('hand', c.id))}
           {renderSection(t('common.section.amulet'), amuletCards, 'amulet', c => keyOf('amulet', c.id))}
           {renderSection(t('common.section.equipment'), equipmentCardsForRender, 'equipment', equipmentKeyOf, equipmentLabelOf)}
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-2">
+        <DialogFooter className="gap-2 sm:gap-2 flex-shrink-0">
           <Button variant="outline" onClick={() => onConfirm([])}>
             {t('modal.backpackReorganize.skipZero')}
           </Button>

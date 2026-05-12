@@ -280,6 +280,7 @@ const EXACT_REDUCER_TOKENS = new Set([
   'grantStarterDungeonSwap',
   'grantStarterDimensionWarp',
   'grantHandOnHandHeal:1',
+  'grantHandOnHandGold:2',
   'grantLastWordsMaxHp:4',
   'pactCopyActiveRow',
   'amplify-altar-from-random-class-equip-with-warp',
@@ -480,7 +481,7 @@ export function getFlipToCardDefinition(token: string, rng: RngState): FlipCardD
       return { card: { id, type: 'magic', name: '奥术护盾', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'arcane-shield-stun-cap', description: '永久魔法（Perm 2）：击晕上限 +X%，X = 本回合已使用的非伤害魔法卡数量。', shortDescription: '击晕上限 +X%（X ＝ 本回合非伤害魔法数）', recycleDelay: 2 }, rng, banner: '奥术回廊翻转为奥术护盾，已放入背包。', logMessage: '事件效果：奥术回廊翻转成了「奥术护盾」', transformMessage: '奥术回廊翻转为「奥术护盾」…' };
     },
     guildFlipToMagic: () => {
-      return { card: { id: 'guild-blood-gold', type: 'magic', name: '血金术', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: '永久魔法：受到 1 点伤害，获得 2 金币。', description: '以鲜血换取黄金，奇术商会的禁忌手段。', shortDescription: '-1 生命；+2 金币' }, rng, banner: '商会卷轴翻转为「血金术」，已放入背包。', logMessage: '事件效果：获得「血金术」', transformMessage: '奇术商会翻转为「血金术」…' };
+      return { card: { id: 'guild-blood-gold', type: 'magic', name: '血金术', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: '永久魔法：受到 1 点伤害，获得 3 金币。', description: '以鲜血换取黄金，奇术商会的禁忌手段。', shortDescription: '-1 生命；+3 金币' }, rng, banner: '商会卷轴翻转为「血金术」，已放入背包。', logMessage: '事件效果：获得「血金术」', transformMessage: '奇术商会翻转为「血金术」…' };
     },
     guildFlipToHandRecycleMagic: () => {
       [id, rng] = nextId(rng, 'guild-hand-recycle');
@@ -2130,7 +2131,8 @@ export function applySimpleEffect(
              // 翻转之契
              effectToken === 'grantHandStunCapBonus' || effectToken === 'grantEquipFlipRepairBuff' ||
              // New event tokens — see plan "Add 15 new event options"
-             effectToken === 'grantHandOnHandHeal:1' || effectToken === 'grantLastWordsMaxHp:4' ||
+             effectToken === 'grantHandOnHandHeal:1' || effectToken === 'grantHandOnHandGold:2' ||
+             effectToken === 'grantLastWordsMaxHp:4' ||
              effectToken === 'pactCopyActiveRow' ||
              // 「右翼回响」 grants — interactive (open modal in useEventSystem)
              effectToken === 'grantHandTopOnRecycleRestore' ||

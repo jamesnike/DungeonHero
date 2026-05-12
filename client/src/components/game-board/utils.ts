@@ -819,7 +819,7 @@ export function createDeck(rng: RngState): [GameCardData[], RngState] {
         magicType: 'permanent',
         magicEffect: '永久：对怪造成伤害；用后叠刺+1，回回收袋。',
         description: '每用过一次叠刺+1；卡面数字为叠刺层数。',
-        scalingDamage: 1,
+        scalingDamage: 3,
       },
       destination: 'backpack',
       message: '暗影契约翻转为「暗影之刺」，已放入背包。',
@@ -1140,12 +1140,12 @@ export function createDeck(rng: RngState): [GameCardData[], RngState] {
     name: '劝降祭典',
     value: 0,
     image: dedupePersuadeScrollCharmImage,
-    description: '若装备着怀柔之印或劝降归袋符，将升级它们。',
+    description: '劝降等级 +1。若装备着怀柔之印或劝降归袋符，将升级它们。',
     eventChoices: [
       {
         text: '掷出劝降骰：劝降等级+1/劝降费用-2/连劝减半/种族加成/耐久增强',
-        hint: '20% 概率触发不同劝降增强',
-        effect: 'upgradePersuadeAmulets',
+        hint: '通用：劝降等级+1 + 升级劝降护符；并掷出 5 种增强之一',
+        effect: ['persuadeLevel+1', 'upgradePersuadeAmulets'],
         diceTable: [
           { id: 'persuade-dice-level', range: [1, 4], label: '劝降等级 +1', effect: 'persuadeLevel+1' },
           { id: 'persuade-dice-cost', range: [5, 8], label: '劝降费用永久 -2', effect: 'persuadeCost-2' },

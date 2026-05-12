@@ -125,8 +125,13 @@ export default function ShopModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[95vh] overflow-y-auto">
-        <DialogHeader>
+      {/*
+        Layout：flex 列 + 中间区滚动 + footer 固定。详见 CardDeletionModal 同款注释——
+        商店有大量商品时，「完成购物」按钮原本被挤到滚动区底部 + mobile 浏览器
+        chrome 遮挡，玩家很难退出。
+      */}
+      <DialogContent className="sm:max-w-2xl max-h-[95dvh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <ShoppingBag className="w-5 h-5 text-amber-500" />
             {t('modal.shop.title')}
@@ -138,7 +143,7 @@ export default function ShopModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4 mt-4">
+        <div className="flex flex-col gap-4 mt-4 flex-1 min-h-0 overflow-y-auto">
           <div className="flex flex-wrap items-center gap-4 rounded-md border border-border/60 bg-muted/40 p-3 text-sm">
             <span className="flex items-center gap-1 font-semibold">
               <Coins className="w-4 h-4 text-yellow-500" />
@@ -576,15 +581,16 @@ export default function ShopModal({
             })()}
           </div>
 
-          <div className="flex justify-center pt-2 px-1">
-            <Button
-              variant="ghost"
-              className="w-full max-w-[min(22rem,calc(100vw-2rem))] sm:max-w-none sm:w-auto min-h-[clamp(2.5rem,7vmin,3.75rem)] min-w-[clamp(10.5rem,58vw,17.5rem)] sm:min-w-[clamp(11rem,36vw,17.5rem)] px-[clamp(1rem,5.5vw,2.75rem)] py-[clamp(0.45rem,2.2vmin,1.6rem)] text-[clamp(0.8125rem,2.6vmin,1.125rem)] rounded-xl font-bold text-white bg-gradient-to-b from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 border-0 shadow-lg shadow-amber-900/30 ring-2 ring-amber-300/80 ring-offset-[clamp(2px,0.5vmin,4px)] ring-offset-background"
-              onClick={onFinish}
-            >
-              {t('modal.shop.finishShopping')}
-            </Button>
-          </div>
+        </div>
+
+        <div className="flex justify-center pt-2 px-1 flex-shrink-0">
+          <Button
+            variant="ghost"
+            className="w-full max-w-[min(22rem,calc(100vw-2rem))] sm:max-w-none sm:w-auto min-h-[clamp(2.5rem,7vmin,3.75rem)] min-w-[clamp(10.5rem,58vw,17.5rem)] sm:min-w-[clamp(11rem,36vw,17.5rem)] px-[clamp(1rem,5.5vw,2.75rem)] py-[clamp(0.45rem,2.2vmin,1.6rem)] text-[clamp(0.8125rem,2.6vmin,1.125rem)] rounded-xl font-bold text-white bg-gradient-to-b from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 border-0 shadow-lg shadow-amber-900/30 ring-2 ring-amber-300/80 ring-offset-[clamp(2px,0.5vmin,4px)] ring-offset-background"
+            onClick={onFinish}
+          >
+            {t('modal.shop.finishShopping')}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

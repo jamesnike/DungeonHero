@@ -509,7 +509,7 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
   6. 削弱威慑（劝降等级 -1） → `persuadeLevel-1`（需劝降等级≥2）
   7. 召唤夜市（打开商店，跳过翻转） → `openShop`，skipFlip
 - 翻转为「暗影之刺」（永久魔法），destination: backpack
-  - 永久：对怪造成伤害；用后叠刺+1，回回收袋。scalingDamage: 1。
+  - 永久：对怪造成伤害；用后叠刺+1，回回收袋。scalingDamage: 3。
 
 ---
 
@@ -742,12 +742,14 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 
 ### 17. 劝降祭典
 
-- 描述：若装备着怀柔之印或劝降归袋符，将升级它们。
-- 选项前置效果：升级已装备的劝降护符 → `upgradePersuadeAmulets`
-  - 怀柔之印升级后：每获得一次临时攻击或临时护甲加成，下一次劝降率 +20%（原为 +10%）
-  - 劝降归袋符升级后：每劝降一次，将两张「归袋抽引」加入手牌（原为 1 张）
+- 描述：劝降等级 +1。若装备着怀柔之印或劝降归袋符，将升级它们。
+- 选项前置效果（无视掷骰结果，always 触发）→ `['persuadeLevel+1', 'upgradePersuadeAmulets']`
+  - 劝降等级 +1（永久；下次相关骰面命中 `'persuadeLevel+1'` 时再叠加 → 总 +2，视为幸运加成）
+  - 升级已装备的劝降护符（`upgradePersuadeAmulets`）：
+    - 怀柔之印升级后：每获得一次临时攻击或临时护甲加成，下一次劝降率 +20%（原为 +10%）
+    - 劝降归袋符升级后：每劝降一次，将两张「归袋抽引」加入手牌（原为 1 张）
 - 选项（掷骰，6 面，重平衡后骰面）：
-  1. 劝降等级 +1 → `persuadeLevel+1`（[1,4]）
+  1. 劝降等级 +1 → `persuadeLevel+1`（[1,4]；与通用效果叠加为 +2）
   2. 劝降费用永久 -2 → `persuadeCost-2`（[5,8]）
   3. 连续劝降同一怪物，第二次费用减半 → `persuadeSameTargetCostHalve`（[9,11]）
   4. Skeleton/Wraith 劝降率 +20% → `persuadeRaceBonus:Skeleton,Wraith:20`（[12,14]）
@@ -792,15 +794,17 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 ### 20. 赋能神殿
 
 - 描述：掷骰子，为一张手牌赋予侧击或转型效果。
-- 选项 1：掷出赋能骰（需要至少 1 张手牌，6 面，重平衡后骰面）
-  - 1. 侧击：劝降费用永久 -1 → `grantFlankPersuadeCost:1`（[1,3]）
-  - 2. 侧击：击晕上限 +5% → `grantFlankStunCap:5`（[4,6]）
-  - 3. 转型：抽 1 张牌 → `grantTransformDraw:1`（[7,9]）
-  - 4. 侧击：恢复 2 HP → `grantFlankHeal:2`（[10,13]）
-  - 5. 侧击：对随机怪物造成 5 点伤害 → `grantFlankDamage:5`（[14,17]）
-  - 6. 上手：恢复 1 HP → `grantHandOnHandHeal:1`（[18,20]）
+- 选项 1：掷出赋能骰（需要至少 1 张手牌；作者侧 7 行，`pruneEventChoicesToThree` 在牌堆构建时随机抽 3 行映射为 [1,7]/[8,14]/[15,20]，每项每局约 43% 出现率）
+  - 1. 侧击：劝降费用永久 -1 → `grantFlankPersuadeCost:1`
+  - 2. 侧击：击晕上限 +5% → `grantFlankStunCap:5`
+  - 3. 转型：抽 2 张牌 → `grantTransformDraw:2`
+  - 4. 侧击：恢复 2 HP → `grantFlankHeal:2`
+  - 5. 侧击：对随机怪物造成 5 点伤害 → `grantFlankDamage:5`
+  - 6. 上手：恢复 1 HP → `grantHandOnHandHeal:1`
+  - 7. 上手：金币 +2 → `grantHandOnHandGold:2`
 - 选项 2：失去 5 生命 离开 → `hp-5`（仅当掷骰选项不可用时可选 / `requiresDisabledChoices: ['shrine-roll-dice']`）
 - `grantHandOnHandHeal:1`：弹出手牌选择 modal（`PermGrantSourceType: 'on-hand-heal-grant'`），选中手牌挂 `onEnterHandEffect: 'on-hand-heal-1'`，并立即触发一次回血 1 HP（不超过 maxHp）。已挂其他 `onEnterHandEffect` 的卡不可被选。
+- `grantHandOnHandGold:2`：弹出手牌选择 modal（`PermGrantSourceType: 'on-hand-gold-grant'`），选中手牌挂 `onEnterHandEffect: 'on-hand-gold-2'`，并立即触发一次 +2 金币（mirror `grantHandOnHandHeal:1` 流程；flat 数值无加成）。已挂其他 `onEnterHandEffect` 的卡不可被选。
 
 ---
 
@@ -1133,7 +1137,7 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 | # | 名称 | amuletEffect | 效果 | 可升级 |
 |---|------|-------------|------|:------:|
 | 1 | 双守护圣盾 | dual-guard | 护盾完美格挡时（护甲值≥攻击力），该装备栏永久护甲+1。「铁壁塔盾」的完全格挡视为完美格挡。 | — |
-| 2 | 雷霆符印 | discard-zap | 每弃置一张牌到坟场，对激活行随机怪物造成 1 点伤害。 | — |
+| 2 | 雷霆符印 | discard-zap | 每弃置一张牌到坟场，对激活行随机怪物造成 3 点伤害。 | — |
 | 3 | 残骸回收符 | equipment-salvage | 装备摧毁时，改为回到手牌，耐久上限-1（减到0时从游戏里删掉）。 | — |
 | 4 | 血怒战符 | bloodrage-attack | 每次对自己造成伤害时，所有装备栏临时攻击 +3。 | — |
 | 5 | 怀柔之印 | persuade-on-temp-attack | 每获得一次临时攻击或临时护甲加成，下一次劝降率 +10%。升级后：+20%。 | 最高 1 级 |
@@ -1141,7 +1145,7 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 | 7 | 咒纹刻印 | magic-class-discover | 每使用 5 张「当前功能上是瞬发」的 magic 牌（type === 'magic' 且 !cardHasPermFlag），发现一张专属牌。原生 Instant 被「永恒铭刻」/「附魔祭坛」/「永恒铭刻药」加 Perm 后不计入；原生 Permanent 被「凡化咒」剥离 Perm 后计入。不含 hero-magic / curse。 | — |
 | 8 | 晕锤归袋符 | stun-recycle-to-hand | 每击晕一次怪物，从回收袋随机取回两张牌到手牌。 | — |
 | 9 | 磐石坚守符 | armor-halve-endure | 每回合格挡耐久上限 +1。 | — |
-| 10 | 驯兽铸印 | monster-equip-buff | 每次装备一个怪物时，该装备栏永久攻击 +1 且 永久护甲 +1。 | — |
+| 10 | 驯兽铸印 | monster-equip-buff | 每次装备一个怪物时，该装备栏永久攻击 +1，永久护甲 +1，并立即恢复 1 点耐久（不超过耐久上限）。叠加：N 件 → +N 攻 / +N 护 / 恢复 N 耐久。 | — |
 | 11 | 招灵书印 | delete-draw | 每删除或销毁一张牌（含护符 / 装备被事件、魔法、瀑流销毁），从背包随机抽 2 张牌。 | — |
 | 12 | 雷金护符 | stun-gold | 每击晕一次怪物，金币 +10，然后立即移除该怪物的击晕状态（怪物下回合正常行动）。同时击晕多个怪物按怪物数量多次触发。覆盖所有击晕来源：武器普攻、盾击、英雄技能「雷震」/「侧击」、魔法卡「震慑领域」/「命运透视」/「颠倒乾坤」/「雷震击」、永恒护符「震荡弹幕」。叠加：N 件 → 一次击晕 +10N 金币（仍只移除 1 次击晕）。 | — |
 | 13 | 赎血召牌符 | self-damage-draw | 每次对自己造成伤害（实际损失 ≥1 HP）时，从背包随机抽 2 张牌（受手牌上限约束；护盾完全抵消的伤害不触发）。叠加：N 件 → 一次自伤抽 2N 张。 | — |

@@ -18,7 +18,7 @@ export default function DeckPeekModal({ state, onClose }: DeckPeekModalProps) {
     const { peekedCards, gains } = state;
     return (
       <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
-        <DialogContent className="sm:max-w-lg max-h-[95vh] overflow-y-auto" overlayClassName="bg-black/30">
+        <DialogContent className="sm:max-w-lg max-h-[95dvh] overflow-y-auto" overlayClassName="bg-black/30">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Sparkles className="w-5 h-5 text-amber-400" />
@@ -82,7 +82,7 @@ export default function DeckPeekModal({ state, onClose }: DeckPeekModalProps) {
     const { peekedCards, monsterCount, deleteCount, gains } = state;
     return (
       <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
-        <DialogContent className="sm:max-w-lg max-h-[95vh] overflow-y-auto" overlayClassName="bg-black/30">
+        <DialogContent className="sm:max-w-lg max-h-[95dvh] overflow-y-auto" overlayClassName="bg-black/30">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Eye className="w-5 h-5 text-indigo-400" />
@@ -147,7 +147,7 @@ export default function DeckPeekModal({ state, onClose }: DeckPeekModalProps) {
 
   return (
     <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[95vh] overflow-y-auto" overlayClassName="bg-black/30">
+      <DialogContent className="sm:max-w-lg max-h-[95dvh] overflow-y-auto" overlayClassName="bg-black/30">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Eye className="w-5 h-5 text-indigo-400" />

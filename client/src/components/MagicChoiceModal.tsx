@@ -32,7 +32,7 @@ export default function MagicChoiceModal({ open, state, onChoice }: MagicChoiceM
         显式关闭路径：点其中一个 option 按钮（onChoice）。
       */}
       <DialogContent
-        className="sm:max-w-md max-h-[95vh] overflow-y-auto"
+        className="sm:max-w-md max-h-[95dvh] overflow-y-auto"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >

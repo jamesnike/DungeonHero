@@ -196,7 +196,7 @@
 | `flipToCurse` | 血咒之印 | 永久魔法（诅咒） | 使用和弃置时，都失去 3 点生命值 | 背包 |
 | `flipToRecallEquip` | 回收术 | 永久魔法 | 失去 2 点生命，回手一张牌（从装备栏或护符栏选择） | 背包 |
 | `flipToUndyingBlessing` | 不灭赐福 | 永久魔法 | 选择一个装备，赋予其复生（首次毁坏时以 1 耐久复生），失去 2 点生命 | 背包 |
-| `guildFlipToMagic` | 血金术 | 永久魔法 | 使用时受到 1 点伤害，获得 2 金币 | 背包 |
+| `guildFlipToMagic` | 血金术 | 永久魔法 | 使用时受到 1 点伤害，获得 3 金币 | 背包 |
 
 > `goldHalve`：金币 = `Math.floor(state.gold / 2)`。
 
@@ -308,7 +308,7 @@
 
 | 效果 | 产物名 | 类型 | 描述 | 去向 |
 |------|--------|------|------|------|
-| `guildFlipToMagic` | 血金术 | 永久魔法 | 使用时受到 1 点伤害，获得 2 金币 | 背包 |
+| `guildFlipToMagic` | 血金术 | 永久魔法 | 使用时受到 1 点伤害，获得 3 金币 | 背包 |
 | `guildFlipToHandRecycleMagic` | 奇术轮转 | 永久魔法 | 使用时所有手牌移入回收袋，再从回收袋随机 2 张移到手上 | 背包 |
 
 ---
@@ -432,7 +432,9 @@
 
 ## 17. 劝降祭典
 
-- 选项前置效果：升级已装备的劝降护符 → `upgradePersuadeAmulets`
+- 选项前置效果（无视掷骰结果，always 触发）→ `['persuadeLevel+1', 'upgradePersuadeAmulets']`
+  - 劝降等级 +1（永久）
+  - 升级已装备的劝降护符（怀柔之印 / 劝降归袋符）
 
 | # | 选项 | 效果 |
 |---|------|------|
@@ -442,7 +444,7 @@
 
 | 范围 | 结果 | 效果 |
 |------|------|------|
-| 1-4 | 劝降等级 +1 | `persuadeLevel+1` |
+| 1-4 | 劝降等级 +1（与通用效果叠加为 +2） | `persuadeLevel+1` |
 | 5-8 | 劝降费用永久 -2 | `persuadeCost-2` |
 | 9-11 | 连续劝降同一怪物，第二次费用减半 | `persuadeSameTargetCostHalve` |
 | 12-14 | Skeleton/Wraith 劝降率 +20% | `persuadeRaceBonus:Skeleton,Wraith:20` |
@@ -476,16 +478,21 @@
 
 **骰子表（重平衡后）：**
 
-| 范围 | 结果 | 效果 |
-|------|------|------|
-| 1-3 | 侧击：劝降费用永久 -1 | `grantFlankPersuadeCost:1` |
-| 4-6 | 侧击：击晕上限 +5% | `grantFlankStunCap:5` |
-| 7-9 | 转型：抽 1 张牌 | `grantTransformDraw:1` |
-| 10-13 | 侧击：恢复 2 HP | `grantFlankHeal:2` |
-| 14-17 | 侧击：对随机怪物造成 5 点伤害 | `grantFlankDamage:5` |
-| 18-20 | 上手：恢复 1 HP | `grantHandOnHandHeal:1` |
+> 作者侧 7 行 dice，`pruneEventChoicesToThree` 在牌堆构建时随机抽 3 行重新映射为 [1,7]/[8,14]/[15,20]，每项每局约 43% 出现率。下表「范围」仅作 source-level 文档参考。
+
+| # | 选项 | 效果 |
+|---|------|------|
+| 1 | 侧击：劝降费用永久 -1 | `grantFlankPersuadeCost:1` |
+| 2 | 侧击：击晕上限 +5% | `grantFlankStunCap:5` |
+| 3 | 转型：抽 2 张牌 | `grantTransformDraw:2` |
+| 4 | 侧击：恢复 2 HP | `grantFlankHeal:2` |
+| 5 | 侧击：对随机怪物造成 5 点伤害 | `grantFlankDamage:5` |
+| 6 | 上手：恢复 1 HP | `grantHandOnHandHeal:1` |
+| 7 | 上手：金币 +2 | `grantHandOnHandGold:2` |
 
 > `grantHandOnHandHeal:1`：弹出手牌选择 modal（`PermGrantSourceType: 'on-hand-heal-grant'`），选定的手牌挂 `onEnterHandEffect: 'on-hand-heal-1'`，并立即触发一次回血 1 HP（不超过 maxHp）。已挂其他 `onEnterHandEffect` 的卡不可被选。
+>
+> `grantHandOnHandGold:2`：弹出手牌选择 modal（`PermGrantSourceType: 'on-hand-gold-grant'`），选定的手牌挂 `onEnterHandEffect: 'on-hand-gold-2'`，并立即触发一次 +2 金币。每次该卡进入手牌（抽牌 / 回手 / 翻面 / 坟场召回 等）触发一次 +2 金币——flat 数值无加成。已挂其他 `onEnterHandEffect` 的卡不可被选。
 
 ---
 

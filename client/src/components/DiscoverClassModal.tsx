@@ -38,13 +38,17 @@ export default function DiscoverClassModal({
         if (!nextOpen && onMinimize) onMinimize();
       }}
     >
-      <DialogContent className="sm:max-w-2xl max-h-[95vh] overflow-y-auto p-5 sm:p-8">
-        <DialogHeader>
+      {/*
+        Layout：flex 列 + 中间区滚动 + footer 固定（仅当有 onCancel 时）。
+        详见 CardDeletionModal 同款注释。
+      */}
+      <DialogContent className="sm:max-w-2xl max-h-[95dvh] flex flex-col p-5 sm:p-8">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>{headerTitle}</DialogTitle>
           <DialogDescription>{headerDescription}</DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 flex-1 min-h-0 overflow-y-auto">
           {cards.length === 0 && (
             <div className="col-span-full text-center text-muted-foreground text-sm">
               {t('modal.discoverClass.empty')}
@@ -68,7 +72,7 @@ export default function DiscoverClassModal({
         </div>
 
         {onCancel && (
-          <div className="flex justify-center pt-2">
+          <div className="flex justify-center pt-2 flex-shrink-0">
             <button
               type="button"
               className="rounded-md border border-border px-5 py-2 text-sm text-muted-foreground hover:bg-muted/60 transition-colors"

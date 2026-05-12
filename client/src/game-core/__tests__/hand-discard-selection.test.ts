@@ -79,6 +79,18 @@ function makeDiscardDraw(id = `${STARTER_CARD_IDS.discardDraw}-pick-1`): GameCar
   } as GameCardData;
 }
 
+function makeEchoBag(id = 'echo-bag-1'): GameCardData {
+  return {
+    id,
+    type: 'magic' as const,
+    name: '回响行囊',
+    value: 0,
+    image: '',
+    magicType: 'instant',
+    description: 'test',
+  } as GameCardData;
+}
+
 // ---------------------------------------------------------------------------
 // 祭坛秘术 (altar-discard-discover)
 // ---------------------------------------------------------------------------
@@ -292,6 +304,112 @@ describe('汰旧迎新 — 玩家选择弃回', () => {
     expect(result.state.handCards.find(c => c.id === 'curse-1')).toBeDefined();
     // 背包一张牌仍被抽到手（汰旧迎新的下游效果）
     expect(result.state.handCards.find(c => c.id === 'bp1')).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 回响行囊 (echo-bag)
+// ---------------------------------------------------------------------------
+
+describe('回响行囊 — 玩家选择弃回（不是随机！）', () => {
+  it('手牌 ≥ 2 张可弃 → 弹出 pendingHandDiscardSelection（subEffect=echo-bag）', () => {
+    const card = makeEchoBag();
+    const h1 = makeFiller('h1', 'A');
+    const h2 = makeFiller('h2', 'B');
+    const h3 = makeFiller('h3', 'C');
+    const state = makeState({
+      handCards: [card, h1, h2, h3],
+    });
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    expect(result.state.pendingHandDiscardSelection).not.toBeNull();
+    const pending = result.state.pendingHandDiscardSelection!;
+    expect(pending.subEffect).toBe('echo-bag');
+    expect(pending.count).toBe(2);
+    expect(pending.sourceCardId).toBe(card.id);
+    // 三张普通手牌仍在手里（PLAY_CARD 已经把 card 自身移走，但还没弃手牌）
+    expect(result.state.handCards.find(c => c.id === 'h1')).toBeDefined();
+    expect(result.state.handCards.find(c => c.id === 'h2')).toBeDefined();
+    expect(result.state.handCards.find(c => c.id === 'h3')).toBeDefined();
+    // 回响行囊本身已被 PLAY_CARD 消费，不应该出现在弃回候选里
+    expect(result.state.handCards.find(c => c.id === card.id)).toBeUndefined();
+  });
+
+  it('RESOLVE → 玩家挑的两张精确进入坟场（不是随机选的两张）', () => {
+    const card = makeEchoBag();
+    const h1 = makeFiller('h1', 'KeepMe');
+    const h2 = makeFiller('h2', 'PickMeA');
+    const h3 = makeFiller('h3', 'PickMeB');
+    const state = makeState({
+      handCards: [card, h1, h2, h3],
+    });
+    let result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect(result.state.pendingHandDiscardSelection).not.toBeNull();
+
+    // 玩家选 h2 + h3（不是随机！）
+    result = drain(result.state, [
+      { type: 'RESOLVE_HAND_DISCARD_SELECTION', cardIds: ['h2', 'h3'] } as GameAction,
+    ]);
+
+    expect(result.state.pendingHandDiscardSelection).toBeNull();
+    // h1（玩家保留的）仍在手里
+    expect(result.state.handCards.find(c => c.id === 'h1')).toBeDefined();
+    // h2 / h3（玩家选弃的）进坟场
+    expect(result.state.handCards.find(c => c.id === 'h2')).toBeUndefined();
+    expect(result.state.handCards.find(c => c.id === 'h3')).toBeUndefined();
+    expect(result.state.discardedCards.find(c => c.id === 'h2')).toBeDefined();
+    expect(result.state.discardedCards.find(c => c.id === 'h3')).toBeDefined();
+  });
+
+  it('手牌不足 2 张 → 自动跑后续，不弹窗', () => {
+    const card = makeEchoBag();
+    const h1 = makeFiller('h1');
+    const state = makeState({
+      handCards: [card, h1],
+      backpackItems: [makeFiller('bp1'), makeFiller('bp2')] as any,
+    });
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect(result.state.pendingHandDiscardSelection).toBeNull();
+    // 仅有的 1 张普通手牌被自动弃
+    expect(result.state.handCards.find(c => c.id === 'h1')).toBeUndefined();
+    expect(result.state.discardedCards.find(c => c.id === 'h1')).toBeDefined();
+  });
+
+  it('诅咒不出现在可弃手牌里：3 张诅咒 + 0 张普通 → auto 路径弃 0 张', () => {
+    const card = makeEchoBag();
+    const c1 = makeCurse('curse-1');
+    const c2 = makeCurse('curse-2');
+    const c3 = makeCurse('curse-3');
+    const state = makeState({
+      handCards: [card, c1, c2, c3],
+    });
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect(result.state.pendingHandDiscardSelection).toBeNull();
+    // 诅咒留在手里
+    expect(result.state.handCards.find(c => c.id === 'curse-1')).toBeDefined();
+    expect(result.state.handCards.find(c => c.id === 'curse-2')).toBeDefined();
+    expect(result.state.handCards.find(c => c.id === 'curse-3')).toBeDefined();
+    expect(result.state.discardedCards.find(c => c.id?.startsWith('curse-'))).toBeUndefined();
+  });
+
+  it('诅咒不能被玩家选中：尝试在 RESOLVE 里塞诅咒会被拒', () => {
+    const card = makeEchoBag();
+    const h1 = makeFiller('h1');
+    const h2 = makeFiller('h2');
+    const c1 = makeCurse('curse-1');
+    const state = makeState({
+      handCards: [card, h1, h2, c1],
+    });
+    let result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect(result.state.pendingHandDiscardSelection).not.toBeNull();
+
+    const before = result.state;
+    const after = reduce(result.state, {
+      type: 'RESOLVE_HAND_DISCARD_SELECTION',
+      cardIds: ['h1', 'curse-1'],
+    } as GameAction);
+    expect(after.state.pendingHandDiscardSelection).toBe(before.pendingHandDiscardSelection);
+    expect(after.state.handCards.length).toBe(before.handCards.length);
   });
 });
 

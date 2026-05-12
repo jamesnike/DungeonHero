@@ -227,5 +227,74 @@ describe('Monster graveyard currentLayer reset', () => {
       expect(inBackpack!.maxDurability).toBe(4);
       expect(inBackpack!.durability).toBe(1);
     });
+
+    it('end-to-end: RESOLVE_GRAVEYARD_SELECTION delivers killed monster to HAND as 1/N (regression: was un-primed and not equippable)', () => {
+      // Bug: when delivery='hand-first' (e.g. 净册涌泉, potion 潜流抽卡药),
+      // the toHand branch pushed the raw graveyard card directly into hand,
+      // bypassing primeMonsterAsEquipment. A monster card with no
+      // durability/maxDurability fails isMonsterEquipmentCard() — the UI
+      // refused to let the player drag it onto an equipment slot. The fix
+      // primes the card up-front so both hand and backpack delivery paths
+      // are consistent.
+      const dragon = makeMultiLayerDragon({ currentLayer: 4 });
+      let state = makeState({ discardedCards: [], handCards: [] });
+      state = reduce(state, { type: 'ADD_TO_GRAVEYARD', card: dragon }).state;
+      const inGrave = state.discardedCards.find(c => c.id === dragon.id)!;
+      expect(inGrave.currentLayer).toBe(1);
+      // Critical: graveyard form has durability stripped.
+      expect(inGrave.durability).toBeUndefined();
+      expect(inGrave.maxDurability).toBeUndefined();
+
+      state = {
+        ...state,
+        graveyardDiscoverState: [inGrave],
+        graveyardDiscoverDelivery: 'hand-first',
+      };
+      const result = reduce(state, {
+        type: 'RESOLVE_GRAVEYARD_SELECTION',
+        cardIds: [inGrave.id],
+        context: { delivery: 'hand-first' },
+      } as any);
+      const inHand = result.state.handCards.find(c => c.id === dragon.id);
+      expect(inHand).toBeDefined();
+      // Must be in equipment-form (1/4) so isMonsterEquipmentCard returns
+      // true and the player can drag it onto an equipment slot.
+      expect(inHand!.maxDurability).toBe(4);
+      expect(inHand!.durability).toBe(1);
+    });
+
+    it('end-to-end: hand-first falls back to backpack when hand is full, still primed as 1/N', () => {
+      const dragon = makeMultiLayerDragon({ currentLayer: 4 });
+      // Fill hand to limit so the hand-first branch falls through to backpack.
+      const filler = (i: number): GameCardData => ({
+        id: `filler-${i}`,
+        type: 'potion',
+        name: 'Filler',
+        value: 0,
+      } as GameCardData);
+      let state = makeState({
+        discardedCards: [],
+        handCards: Array.from({ length: 7 }, (_, i) => filler(i)),
+      });
+      state = reduce(state, { type: 'ADD_TO_GRAVEYARD', card: dragon }).state;
+      const inGrave = state.discardedCards.find(c => c.id === dragon.id)!;
+
+      state = {
+        ...state,
+        graveyardDiscoverState: [inGrave],
+        graveyardDiscoverDelivery: 'hand-first',
+      };
+      const result = reduce(state, {
+        type: 'RESOLVE_GRAVEYARD_SELECTION',
+        cardIds: [inGrave.id],
+        context: { delivery: 'hand-first' },
+      } as any);
+      // Hand was full — should land in backpack instead.
+      expect(result.state.handCards.find(c => c.id === dragon.id)).toBeUndefined();
+      const inBackpack = result.state.backpackItems.find(c => c.id === dragon.id);
+      expect(inBackpack).toBeDefined();
+      expect(inBackpack!.maxDurability).toBe(4);
+      expect(inBackpack!.durability).toBe(1);
+    });
   });
 });

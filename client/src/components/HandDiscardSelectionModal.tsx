@@ -78,13 +78,18 @@ export default function HandDiscardSelectionModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
+      {/*
+        Layout：flex 列 + 中间区滚动 + footer 固定。本 modal 不可取消，
+        若按钮被挤到 mobile 浏览器 chrome 后面，玩家完全卡死游戏 → footer
+        必须始终可见。详见 CardDeletionModal 同款注释。
+      */}
       <DialogContent
-        className="sm:max-w-lg max-h-[95vh] overflow-y-auto"
+        className="sm:max-w-lg max-h-[95dvh] flex flex-col"
         onEscapeKeyDown={e => e.preventDefault()}
         onPointerDownOutside={e => e.preventDefault()}
         onInteractOutside={e => e.preventDefault()}
       >
-        <DialogHeader>
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <Trash2 className="w-5 h-5 text-rose-500" />
             {title}
@@ -94,43 +99,41 @@ export default function HandDiscardSelectionModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-2 space-y-3">
-          <div className="text-xs text-muted-foreground">
-            {t('modal.handDiscardSelection.remainingLabel')}{' '}
-            <span className="font-semibold text-rose-500">{Math.max(0, remaining)}</span>
-          </div>
+        <div className="text-xs text-muted-foreground flex-shrink-0 mt-2">
+          {t('modal.handDiscardSelection.remainingLabel')}{' '}
+          <span className="font-semibold text-rose-500">{Math.max(0, remaining)}</span>
+        </div>
 
-          <div className="upgrade-modal-card-grid">
-            {eligibleHandCards.map(card => {
-              const isSelected = selectedIds.includes(card.id);
-              const reachedCap = !isSelected && selectedIds.length >= requiredCount;
-              return (
-                <div
-                  key={card.id}
-                  className={`upgrade-modal-card-slot${isSelected ? ' upgrade-modal-card-slot--selected' : ''}`}
-                  onClick={() => toggle(card.id)}
-                  style={{
-                    opacity: reachedCap ? 0.4 : 1,
-                    cursor: reachedCap ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  <GameCard card={card} disableInteractions />
-                </div>
-              );
-            })}
-          </div>
+        <div className="upgrade-modal-card-grid flex-1 min-h-0 overflow-y-auto mt-3">
+          {eligibleHandCards.map(card => {
+            const isSelected = selectedIds.includes(card.id);
+            const reachedCap = !isSelected && selectedIds.length >= requiredCount;
+            return (
+              <div
+                key={card.id}
+                className={`upgrade-modal-card-slot${isSelected ? ' upgrade-modal-card-slot--selected' : ''}`}
+                onClick={() => toggle(card.id)}
+                style={{
+                  opacity: reachedCap ? 0.4 : 1,
+                  cursor: reachedCap ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <GameCard card={card} disableInteractions />
+              </div>
+            );
+          })}
+        </div>
 
-          <div className="flex justify-end pt-2 border-t border-border">
-            <Button
-              size="sm"
-              disabled={selectedIds.length !== requiredCount}
-              onClick={handleConfirm}
-              className="bg-rose-600 hover:bg-rose-700 text-white"
-            >
-              <Trash2 className="w-4 h-4 mr-1" />
-              {t('modal.handDiscardSelection.confirmDiscard')} {selectedIds.length}/{requiredCount}
-            </Button>
-          </div>
+        <div className="flex justify-end pt-2 border-t border-border flex-shrink-0">
+          <Button
+            size="sm"
+            disabled={selectedIds.length !== requiredCount}
+            onClick={handleConfirm}
+            className="bg-rose-600 hover:bg-rose-700 text-white"
+          >
+            <Trash2 className="w-4 h-4 mr-1" />
+            {t('modal.handDiscardSelection.confirmDiscard')} {selectedIds.length}/{requiredCount}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

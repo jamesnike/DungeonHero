@@ -28,7 +28,7 @@ export default function EventChoiceModal({ open, eventCard, onChoice, choiceStat
         onMinimize();
       }
     }}>
-      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto overflow-x-hidden">
+      <DialogContent className="sm:max-w-xl max-h-[95dvh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calendar className="w-5 h-5 text-pink-500" />

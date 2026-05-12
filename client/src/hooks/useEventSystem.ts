@@ -840,7 +840,19 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
 
   const handleEventChoice = (choiceIndex: number) => {
     if (depsRef.current.eventChoiceProcessingRef.current) return;
-    depsRef.current.pushUndoSnapshot();
+    // NOTE: Do NOT push an undo snapshot here. Opening the event modal
+    // (handleCardToHero in GameBoard.tsx, ~L6254) already pushed a snapshot
+    // *before* SET_CURRENT_EVENT / SET_EVENT_MODAL_OPEN ran, which captures
+    // the pristine "event card sitting in the dungeon row, modal closed"
+    // state. That is the atomic checkpoint the player expects: a single
+    // Undo on an event choice should revert ALL the way back to before the
+    // event was opened — not just to "modal open, choice not yet picked".
+    //
+    // Pushing a second snapshot here used to make the player click Undo
+    // twice (once to reopen the modal, once to actually revert the event)
+    // and effectively let them resolve the same event two times in a row,
+    // since the first Undo only popped the mid-event checkpoint and the
+    // modal reopened in a re-pickable state.
     if (!currentEventCard || !currentEventCard.eventChoices) return;
 
     const choice = currentEventCard.eventChoices[choiceIndex];
@@ -1302,6 +1314,20 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         depsRef.current.eventChoiceProcessingRef.current = false;
       } else {
         dispatch({ type: 'SET_PERM_GRANT_MODAL', payload: { sourceCardId: 'event-grant', sourceType: 'on-hand-heal-grant' } });
+      }
+
+    // --- 赋能神殿: grant 'on-hand: 金币 +2' to a chosen hand card ---
+    // Mirrors grantHandOnHandHeal exactly: same eligibility (no existing
+    // onEnterHandEffect), same modal flow, same flat-amount semantics.
+    } else if (token === 'grantHandOnHandGold:2' || token === 'grantHandOnHandGold') {
+      const eligible = s.handCards.filter(c => !c.onEnterHandEffect);
+      if (eligible.length === 0) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '手牌中没有可铭刻的卡牌（已带「上手」效果的卡不可选）。' });
+        addGameLog('event', '赋能神殿：没有可铭刻的手牌。');
+        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+        depsRef.current.eventChoiceProcessingRef.current = false;
+      } else {
+        dispatch({ type: 'SET_PERM_GRANT_MODAL', payload: { sourceCardId: 'event-grant', sourceType: 'on-hand-gold-grant' } });
       }
 
     // --- 「奥能裂变」outcome 3: grant 'on-hand: 背包 +1 张「魔弹」' to a chosen hand card ---

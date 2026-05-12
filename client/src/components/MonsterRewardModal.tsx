@@ -32,7 +32,7 @@ export default function MonsterRewardModal({ open, monsterName, options, onSelec
         if (!nextOpen && onMinimize) onMinimize();
       }}
     >
-      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[95dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-amber-400" />

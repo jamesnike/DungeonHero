@@ -801,7 +801,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 治愈余韵 | 治疗药水翻转 | 回复 2×echo HP |
 | 暗影之刺 | 暗影契约翻转 | `scalingDamage`：叠加伤害 |
 | 战血之印 | 战血荣誉翻转 | `honor-blood`：弃置时将激活行所有怪物攻击力 -2 |
-| 血金术 | 奇术商会翻转 | `guild-blood-gold`：-1 HP → +2 金 × echo |
+| 血金术 | 奇术商会翻转 | `guild-blood-gold`：-1 HP → +3 金 × echo |
 | 法术回响 | 时空收缩翻转 | 下一张魔法效果翻倍 |
 | 哥布林的戏法 | 怪物击杀 | 其他手牌全部洗入背包 |
 
@@ -924,7 +924,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 名称 | 效果 |
 |------|------|
 | 双守护圣盾 | 完美格挡时永久+1护甲到该槽位 |
-| 雷霆符印 | 弃牌时对随机怪物造成伤害（`max(0, 1 + permanentSpellDamageBonus)`） |
+| 雷霆符印 | 弃牌时对随机怪物造成伤害（`max(0, 3 + permanentSpellDamageBonus)`） |
 | 弧能之符 | 每次卡牌翻转（`APPLY_CARD_FLIP`，含 stay/backpack/hand/graveyard 各路由）对激活行随机怪物造成法术伤害（`max(0, 3 + permanentSpellDamageBonus)`）；多张独立触发 |
 
 ### 13.4 药水
@@ -1190,7 +1190,7 @@ resolver:                       hero.ts reducer:
 | `DECK_SIZE` | 64 | GameBoard.tsx |
 | D20 50%阈值 | 1–10 vs 11–20 | 通用 |
 | 坟火新星基础伤害 | 3 / 6（升级后） | GameBoard.tsx |
-| 雷霆符印伤害 | `max(0, 1 + permanentSpellDamageBonus)` | GameBoard.tsx |
+| 雷霆符印伤害 | `max(0, 3 + permanentSpellDamageBonus)` | GameBoard.tsx |
 | 弧能之符伤害 | `max(0, 3 + permanentSpellDamageBonus)`（每张独立结算） | GameBoard.tsx |
 | 荣誉之血弃置伤害 | `getSpellDamage(1)` | GameBoard.tsx |
 | Boss反击伤害 | 3 | GameBoard.tsx |

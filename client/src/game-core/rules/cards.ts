@@ -290,6 +290,19 @@ function reducePlayCard(
         sideEffects.push({ event: 'ui:banner', payload: { text: `侧击！${card.name} 布下 ${placeCount} 个地雷${droppedTag}！` } });
         sideEffects.push({ event: 'magic:layMine', payload: { slots: placedMines, droppedCount } });
       }
+    } else if (card.flankEffectId.startsWith('gold:')) {
+      // 附魔祭坛 option 4 / 「右翼回响」option 5（侧拨黄金）侧击：+N 金币。
+      // GameBoard.tsx imperative 拖放链有同款分支（line ~6361），保持双轨一致。
+      const amount = parseInt(card.flankEffectId.replace('gold:', ''), 10) || 3;
+      enqueuedActions.push({ type: 'MODIFY_GOLD', delta: amount, source: 'flank-gold' });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'gold', message: `侧击效果：${card.name} 获得 ${amount} 金币` } });
+      sideEffects.push({ event: 'ui:banner', payload: { text: `侧击！${card.name} 获得 ${amount} 金币！` } });
+    } else if (card.flankEffectId.startsWith('heal:')) {
+      // 赋能神殿 option 4 侧击：恢复 N HP。GameBoard.tsx imperative 链同款（line ~6367）。
+      const amount = parseInt(card.flankEffectId.replace('heal:', ''), 10) || 2;
+      enqueuedActions.push({ type: 'HEAL', amount, source: 'flank-heal' });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `侧击效果：${card.name} 恢复 ${amount} HP` } });
+      sideEffects.push({ event: 'ui:banner', payload: { text: `侧击！${card.name} 恢复 ${amount} HP！` } });
     }
   }
 
@@ -2782,6 +2795,37 @@ function reduceResolvePermGrant(
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
+  if (modal.sourceType === 'flank-gold-grant') {
+    // 附魔祭坛 option 4 / 「右翼回响」option 5（侧拨黄金）/ 任何 grantFlankGold:N token。
+    // 历史上这条 sourceType 的旧名字是 'transform-gold-grant'（仍残留在上方分支以兼容
+    // 旧存档），hook / modal / type 已全部迁移到 'flank-gold-grant' 新名。
+    const targetCard = state.handCards.find(c => c.id === targetCardId);
+    if (!targetCard) return applyPatch(state, patch);
+    const amount = modal.meta?.amount ?? 3;
+    patch.handCards = state.handCards.map(c =>
+      c.id === targetCardId ? { ...c, flankEffect: `+${amount} 金币`, flankEffectId: `gold:${amount}` } : c,
+    );
+    sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `附魔祭坛：「${targetCard.name}」获得侧击效果！` } });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `「${targetCard.name}」获得侧击：+${amount} 金币！` } });
+    if (isEventGrant) enqueuedActions.push({ type: 'COMPLETE_EVENT' });
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+
+  if (modal.sourceType === 'flank-heal-grant') {
+    // 赋能神殿 option 4 / 任何 grantFlankHeal:N token。历史 sourceType 旧名是
+    // 'transform-heal-grant'（同上仍残留兼容），现迁移到 'flank-heal-grant' 新名。
+    const targetCard = state.handCards.find(c => c.id === targetCardId);
+    if (!targetCard) return applyPatch(state, patch);
+    const amount = modal.meta?.amount ?? 2;
+    patch.handCards = state.handCards.map(c =>
+      c.id === targetCardId ? { ...c, flankEffect: `恢复 ${amount} HP`, flankEffectId: `heal:${amount}` } : c,
+    );
+    sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `赋能神殿：「${targetCard.name}」获得侧击效果！` } });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `「${targetCard.name}」获得侧击：恢复 ${amount} HP！` } });
+    if (isEventGrant) enqueuedActions.push({ type: 'COMPLETE_EVENT' });
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+
   if (modal.sourceType === 'transform-draw-grant') {
     const targetCard = state.handCards.find(c => c.id === targetCardId);
     if (!targetCard) return applyPatch(state, patch);
@@ -2845,6 +2889,23 @@ function reduceResolvePermGrant(
     enqueuedActions.push({ type: 'HEAL', amount: 1, source: 'on-hand-heal-1' });
     sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `赋能神殿：「${targetCard.name}」获得「上手：恢复 1 HP」（即时触发一次）` } });
     sideEffects.push({ event: 'ui:banner', payload: { text: `「${targetCard.name}」获得上手回血！+1 HP！` } });
+    if (isEventGrant) enqueuedActions.push({ type: 'COMPLETE_EVENT' });
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+
+  if (modal.sourceType === 'on-hand-gold-grant') {
+    // 赋能神殿 「上手：金币 +2」 — grant 'on-hand-gold-2' on-hand keyword to the
+    // chosen hand card and immediately enqueue MODIFY_GOLD +2 (the card is
+    // already in hand, so without this nudge the gold would not arrive until
+    // next discard / re-draw, mirroring `on-hand-heal-grant`).
+    const targetCard = state.handCards.find(c => c.id === targetCardId);
+    if (!targetCard) return applyPatch(state, patch);
+    patch.handCards = state.handCards.map(c =>
+      c.id === targetCardId ? { ...c, onEnterHandEffect: 'on-hand-gold-2' } : c,
+    );
+    enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 2, source: 'on-hand-gold-2' });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `赋能神殿：「${targetCard.name}」获得「上手：金币 +2」（即时触发一次）` } });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `「${targetCard.name}」获得上手金币！+2 金！` } });
     if (isEventGrant) enqueuedActions.push({ type: 'COMPLETE_EVENT' });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
@@ -3148,7 +3209,14 @@ function reduceCancelPermGrant(state: GameState): ReduceResult {
 
   const eventGrantTypes = ['flank-grant', 'transform-gold-grant', 'flank-persuade-grant',
     'flank-stun-grant', 'flank-damage-grant', 'transform-draw-grant', 'transform-heal-grant',
-    'amulet-perm-grant', 'on-hand-stun-cap-grant', 'on-hand-heal-grant',
+    'amulet-perm-grant', 'on-hand-stun-cap-grant', 'on-hand-heal-grant', 'on-hand-gold-grant',
+    // 「右翼回响」option 1 / 4 / 5 — `on-hand-top-grant`(召感置顶) /
+    // `on-hand-temp-armor-grant`(触手生甲) / `flank-gold-grant`(侧拨黄金，
+    // 也是「附魔祭坛」option 4 共用)；以及「赋能神殿」option 4 共用的
+    // `flank-heal-grant`。历史 cancel 路径漏列这 4 个 → 玩家点取消时事件不会
+    // COMPLETE_EVENT，UI 卡在 EventChoiceModal。
+    'on-hand-top-grant', 'on-hand-temp-armor-grant',
+    'flank-gold-grant', 'flank-heal-grant',
     // 「奥能裂变」outcomes 2 / 3 / 5 / 6 / 7
     'flank-gain-bolt-grant', 'on-hand-add-bolt-bp-grant', 'flank-spawn-mine-grant',
     'transform-mine-damage-grant', 'transform-amplify-bolt-grant'];

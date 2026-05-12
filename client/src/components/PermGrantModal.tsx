@@ -21,6 +21,7 @@ type PermGrantSourceType =
   | 'amulet-perm-grant'
   | 'on-hand-stun-cap-grant'
   | 'on-hand-heal-grant'
+  | 'on-hand-gold-grant'
   | 'on-hand-top-grant'
   | 'on-hand-temp-armor-grant'
   // 「奥能裂变」事件 outcomes 2 / 3 / 5 / 6 / 7 — 5 个新的 hand-card-targeting 赋能类型。
@@ -81,6 +82,8 @@ export default function PermGrantModal({
   const isAmuletPermGrant = sourceType === 'amulet-perm-grant';
   const isOnHandStunCapGrant = sourceType === 'on-hand-stun-cap-grant';
   const isOnHandHealGrant = sourceType === 'on-hand-heal-grant';
+  // 赋能神殿 「上手:金币+2」: same eligibility shape as on-hand-heal-grant.
+  const isOnHandGoldGrant = sourceType === 'on-hand-gold-grant';
   // 「右翼回响」option 1 — grant 'topOnRecycleRestore' keyword.
   const isOnHandTopGrant = sourceType === 'on-hand-top-grant';
   // 「右翼回响」option 4 — grant 'on-enter-hand: random slot temp armor +1'.
@@ -104,6 +107,9 @@ export default function PermGrantModal({
         // 赋能神殿 「上手:回血1」: same exclusion — don't clobber existing
         // on-enter-hand keywords.
         if (isOnHandHealGrant) return !c.onEnterHandEffect;
+        // 赋能神殿 「上手:金币+2」: mirror of heal — exclude cards already
+        // carrying any on-enter-hand keyword to avoid clobbering it.
+        if (isOnHandGoldGrant) return !c.onEnterHandEffect;
         // 「右翼回响」option 1 — exclude cards that already have 'topOnRecycleRestore'.
         if (isOnHandTopGrant) return !c.topOnRecycleRestore;
         // 「右翼回响」option 4 — exclude cards that already carry an on-enter-hand
@@ -141,6 +147,7 @@ export default function PermGrantModal({
     'amulet-perm-grant': 'amuletPermGrant',
     'on-hand-stun-cap-grant': 'onHandStunCapGrant',
     'on-hand-heal-grant': 'onHandHealGrant',
+    'on-hand-gold-grant': 'onHandGoldGrant',
     'on-hand-top-grant': 'onHandTopGrant',
     'on-hand-temp-armor-grant': 'onHandTempArmorGrant',
     // 「奥能裂变」outcomes 2 / 3 / 5 / 6 / 7
@@ -171,12 +178,15 @@ export default function PermGrantModal({
         玩家选哪张卡铭刻是有后果的选择，外点 / ESC 误关会丢失这次永久升级机会。
         显式关闭路径："取消" / X / 确认按钮（赋予 / 铭刻 / 萃取 / 附魔...）。
       */}
+      {/*
+        Layout：flex 列 + 中间区滚动 + footer 固定。详见 CardDeletionModal 同款注释。
+      */}
       <DialogContent
-        className="sm:max-w-lg max-h-[95vh] overflow-y-auto"
+        className="sm:max-w-lg max-h-[95dvh] flex flex-col"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        <DialogHeader>
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <InfinityIcon className="w-5 h-5 text-amber-500" />
             {title}
@@ -186,7 +196,7 @@ export default function PermGrantModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-2 space-y-4">
+        <div className="mt-2 flex-1 min-h-0 overflow-y-auto">
           {eligibleCards.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               {emptyText}
@@ -207,23 +217,23 @@ export default function PermGrantModal({
               })}
             </div>
           )}
+        </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-border">
-            <Button variant="outline" size="sm" onClick={handleClose}>
-              {eligibleCards.length === 0 ? t('common.close') : t('common.cancel')}
+        <div className="flex justify-end gap-2 pt-2 border-t border-border flex-shrink-0">
+          <Button variant="outline" size="sm" onClick={handleClose}>
+            {eligibleCards.length === 0 ? t('common.close') : t('common.cancel')}
+          </Button>
+          {eligibleCards.length > 0 && (
+            <Button
+              size="sm"
+              disabled={!selectedCardId}
+              onClick={handleConfirm}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              <InfinityIcon className="w-4 h-4 mr-1" />
+              {confirmText}
             </Button>
-            {eligibleCards.length > 0 && (
-              <Button
-                size="sm"
-                disabled={!selectedCardId}
-                onClick={handleConfirm}
-                className="bg-amber-600 hover:bg-amber-700 text-white"
-              >
-                <InfinityIcon className="w-4 h-4 mr-1" />
-                {confirmText}
-              </Button>
-            )}
-          </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

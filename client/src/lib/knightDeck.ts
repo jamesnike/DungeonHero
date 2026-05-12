@@ -267,8 +267,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: thunderAmuletSigilImage,
     classCard: true,
-    description: '每弃置一张牌到坟场，对激活行随机怪物造成 1 点伤害。',
-    shortDescription: '每弃置 1 张，对随机怪物造成 1 伤',
+    description: '每弃置一张牌到坟场，对激活行随机怪物造成 3 点伤害。',
+    shortDescription: '每弃置 1 张，对随机怪物造成 3 伤',
     amuletEffect: 'discard-zap',
   });
 
@@ -897,8 +897,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: monsterEquipBuffAmuletImage,
     classCard: true,
-    description: '每次装备一个怪物时，该装备栏永久攻击 +1 且 永久护甲 +1。',
-    shortDescription: '装备怪物时本栏永久 +1 攻且 +1 护',
+    description: '每次装备一个怪物时，该装备栏永久攻击 +1，永久护甲 +1，并立即恢复 1 点耐久（不超过耐久上限）。',
+    shortDescription: '装备怪物时本栏永久 +1 攻 / +1 护 / 恢复 1 耐久',
     amuletEffect: 'monster-equip-buff',
   });
 

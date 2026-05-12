@@ -253,13 +253,25 @@ export default function CardDeletionModal({
         外点 / ESC 全部禁掉，玩家只能用按钮（"取消" / 单卡点击 / 确认 / X）显式关闭。
         参考 CardUpgradeModal 的同款历史 bug 注释。
       */}
+      {/*
+        Layout：flex 列 + 中间区滚动 + footer 固定。
+        历史 bug：原本整个 DialogContent 是单一 overflow-y-auto，footer
+        放在 children 末尾跟着滚 → 移动端卡多时 footer 被挤到滚动区底部，
+        + `100vh` 不算 mobile 浏览器地址栏 → 最后一行按钮直接落在 chrome
+        背后点不到。改成：
+          - max-h 用 `dvh`（dynamic viewport, 自动减地址栏）
+          - DialogContent flex flex-col + 不再 overflow
+          - Header / Footer flex-shrink-0 永远可见
+          - 中间卡片列表 flex-1 min-h-0 overflow-y-auto（min-h-0 关键：
+            否则 flex 子元素无法缩小到内容高度以下）
+      */}
       <DialogContent
-        className="max-w-2xl max-h-[calc(95vh/var(--dialog-zoom,1))] overflow-y-auto"
+        className="max-w-2xl max-h-[calc(95dvh/var(--dialog-zoom,1))] flex flex-col"
         overlayClassName="bg-black/30"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        <DialogHeader>
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Trash2 className="w-5 h-5 text-destructive" />
             {headerTitle}
@@ -285,7 +297,7 @@ export default function CardDeletionModal({
           )}
         </DialogHeader>
 
-        <div className="space-y-6 py-2">
+        <div className="space-y-6 py-2 flex-1 min-h-0 overflow-y-auto">
           {renderCardSection(t('common.section.hand'), handCards, 'hand')}
           {showEquipment && equipmentCards.length > 0 && renderCardSection(t('common.section.equipment'), equipmentCards, 'equipment')}
           {showAmulet && amuletCards.length > 0 && renderCardSection(t('common.section.amulet'), amuletCards, 'amulet')}
@@ -294,7 +306,7 @@ export default function CardDeletionModal({
         </div>
 
         {isBatch && (
-          <DialogFooter className="gap-2 sm:gap-2">
+          <DialogFooter className="gap-2 sm:gap-2 flex-shrink-0">
             <Button
               variant="outline"
               onClick={() => onBatchConfirm?.([])}

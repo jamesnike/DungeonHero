@@ -52,6 +52,7 @@
  * │ amplify-card                     │ B   │ open modal twice              │
  * │ altar-discard-discover           │ B   │ queue (N-1) extra discovers   │
  * │ cascade-reset (瀑流重置)         │ C   │ second pass = no-op + banner  │
+ * │ echo-bag (回响行囊)              │ A   │ discard / discover / draw ×N  │
  * │ storm-volley (风暴箭雨)          │ A   │ damage ×N                     │
  * │ fountain-hand (涌泉满手)         │ A   │ heal & draw ×N                │
  * │ ember-echo (余烬回响)            │ A   │ buff/draw ×N                  │
@@ -1141,8 +1142,42 @@ export function resolveInstantMagic(
       return applyPatch(state, patch, sideEffects);
     }
 
-    case '回响行囊':
-      return resolveEchoBag(state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered);
+    case '回响行囊': {
+      // 「弃回 N 张牌」必须让玩家自选——历史 bug：旧 resolveEchoBag 走
+      // pickRandomHandCardsForDiscardPreferGraveyard 随机抽两张，玩家完全失去
+      // 控制权（专属召唤 / 汰旧迎新 / 祭坛秘术 / 噬血砺锋 都是玩家自选，回响行囊
+      // 是这套家族里唯一漏网的，无意义偏离）。
+      // 当前走 requestOrAutoHandDiscard：可弃手牌足够 → 弹 HandDiscardSelectionModal；
+      // 不足 → 自动弃完所有可弃牌（与其他兄弟卡一致）。后续效果（坟场发现 / 背包补抽）
+      // 走 finalizeEchoBag，与玩家选择路径完全共用。
+      const discardCount = 2 * echoMultiplier;
+      const discoverCount = 2 * echoMultiplier;
+      const drawCount = 2 * echoMultiplier;
+      const promptText = `选择 ${discardCount} 张手牌弃回（之后从坟场发现 ${discoverCount} 张、从背包抽 ${drawCount} 张）。`;
+      const result = requestOrAutoHandDiscard(state, patch, {
+        sourceCardId: card.id,
+        requiredCount: discardCount,
+        title: '回响行囊',
+        prompt: promptText,
+        subEffect: 'echo-bag',
+        context: { kind: 'echo-bag', cardSnapshot: card, discoverCount, drawCount, echoTag },
+      });
+      if (result.mode === 'modal') {
+        banner(sideEffects, promptText);
+        return applyPatch(state, patch, sideEffects, enqueuedActions);
+      }
+      return finalizeEchoBag(
+        state,
+        card,
+        result.discarded,
+        discoverCount,
+        drawCount,
+        echoTag,
+        sideEffects,
+        patch,
+        enqueuedActions,
+      );
+    }
 
     case '潮涌铸甲': {
       patch.pendingMagicAction = {
@@ -2137,9 +2172,9 @@ export function resolvePermanentMagic(
 
     case 'guild-blood-gold': {
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 1 * echoMultiplier, source: 'guild-blood-gold', selfInflicted: true });
-      enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 2 * echoMultiplier, source: 'guild-blood-gold' });
-      log(sideEffects, 'magic', `血金术：受到 ${1 * echoMultiplier} 点伤害，获得 ${2 * echoMultiplier} 金币`);
-      banner(sideEffects, `血金术：以 ${1 * echoMultiplier} 点生命换取 ${2 * echoMultiplier} 金币。${echoTag}`);
+      enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 3 * echoMultiplier, source: 'guild-blood-gold' });
+      log(sideEffects, 'magic', `血金术：受到 ${1 * echoMultiplier} 点伤害，获得 ${3 * echoMultiplier} 金币`);
+      banner(sideEffects, `血金术：以 ${1 * echoMultiplier} 点生命换取 ${3 * echoMultiplier} 金币。${echoTag}`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -4344,77 +4379,6 @@ export function resolveEmberEcho(
   }
   if (isEchoTriggered) parts.push('（回响×2）');
   banner(sideEffects, parts.join(' '));
-  patch.lastPlayedCardCategory = getCardPlayCategory(card);
-  enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-  return applyPatch(state, patch, sideEffects, enqueuedActions);
-}
-
-// ---------------------------------------------------------------------------
-// resolveEchoBag — discard hand → discover from graveyard → draw from backpack
-// ---------------------------------------------------------------------------
-
-function resolveEchoBag(
-  state: GameState,
-  card: GameCardData,
-  sideEffects: SideEffect[],
-  patch: Partial<GameState>,
-  enqueuedActions: GameAction[],
-  echoMultiplier: number,
-  isEchoTriggered: boolean,
-): ReduceResult {
-  const discardCount = 2 * echoMultiplier;
-  const discoverCount = 2 * echoMultiplier;
-  const drawCount = 2 * echoMultiplier;
-  const echoTag = isEchoTriggered ? '（回响×2）' : '';
-
-  // Step 1: randomly discard up to discardCount hand cards
-  const playable = state.handCards.filter((c: GameCardData) => c.id !== card.id);
-  const actualDiscard = Math.min(playable.length, discardCount);
-  let newToGraveyard = 0;
-  if (actualDiscard > 0) {
-    let rng = patch.rng ?? state.rng;
-    const [discarded, rngAfter] = pickRandomHandCardsForDiscardPreferGraveyard(playable, actualDiscard, rng);
-    patch.rng = rngAfter;
-    const discardIds = new Set(discarded.map((c: GameCardData) => c.id));
-    patch.handCards = state.handCards.filter((c: GameCardData) => !discardIds.has(c.id));
-    for (const dc of discarded) {
-      enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
-      if (!isRecyclableFromHand(dc)) newToGraveyard += 1;
-    }
-    log(sideEffects, 'magic', `回响行囊：弃回 ${discarded.map((c: GameCardData) => c.name).join('、')}`);
-  }
-
-  // Step 2: check graveyard for discover candidates
-  // 永久魔法被弃回时走回收袋，不计入坟场。
-  const currentGraveyardSize = (state.discardedCards ?? []).length;
-  const graveyardSize = currentGraveyardSize + newToGraveyard;
-
-  if (graveyardSize > 0 && discoverCount > 0) {
-    // Interactive flow: emit side effect for hook to open graveyard discover UI
-    sideEffects.push({
-      event: 'card:echoBagDiscover',
-      payload: { card, discoverCount, drawCount },
-    });
-    log(sideEffects, 'magic', `回响行囊：从坟场发现 ${discoverCount} 张牌…`);
-    banner(sideEffects, `回响行囊：弃回 ${actualDiscard} 张牌，从坟场发现…${echoTag}`);
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
-
-  // No graveyard cards — skip discover, just draw from backpack
-  const drawState = { ...state, ...patch } as GameState;
-  const drawResult = drawMultipleFromBackpack(drawState, drawCount, { ignoreLimit: true });
-  if (drawResult.cards.length > 0) {
-    mergePatch(patch, drawResult.patch);
-    for (const d of drawResult.cards) {
-      sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
-    }
-    applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
-  }
-  const drawMsg = drawResult.cards.length > 0
-    ? `抽了 ${drawResult.cards.length} 张牌`
-    : '背包为空';
-  banner(sideEffects, `回响行囊：弃回 ${actualDiscard} 张牌，坟场为空，${drawMsg}。${echoTag}`);
   patch.lastPlayedCardCategory = getCardPlayCategory(card);
   enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
   return applyPatch(state, patch, sideEffects, enqueuedActions);

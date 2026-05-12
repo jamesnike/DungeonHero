@@ -1307,7 +1307,7 @@ export function createDeck(
         magicEffect: '永久：对怪造成伤害；用后叠刺+1，回回收袋。',
         description: '每用过一次叠刺+1；卡面数字为叠刺层数。',
         shortDescription: '伤害 ＝ 叠刺层数；用后 +1 层',
-        scalingDamage: 1,
+        scalingDamage: 3,
       },
       destination: 'stay',
       message: '暗影契约翻转为「暗影之刺」！',
@@ -2177,13 +2177,16 @@ export function createDeck(
     name: '劝降祭典',
     value: 0,
     image: persuadeScrollCharmImage,
-    description: '若装备着怀柔之印或劝降归袋符，将升级它们。',
-    shortDescription: '升级劝降相关护符',
+    description: '劝降等级 +1。若装备着怀柔之印或劝降归袋符，将升级它们。',
+    shortDescription: '劝降等级+1，升级劝降护符',
     eventChoices: [
       {
+        // 通用前置效果（无视掷骰结果）：劝降等级 +1 + 升级已装备的劝降护符。
+        // 注意：骰子表里仍保留 `persuade-dice-level: 'persuadeLevel+1'`——
+        // 玩家正好掷到该项时与通用效果叠加为 +2 等级（设计上视为幸运加成）。
         text: '掷出劝降骰：劝降等级+1/劝降费用-2/连劝减半/种族加成/耐久增强/下次成功率+50%',
-        hint: '6 种劝降增强之一',
-        effect: 'upgradePersuadeAmulets',
+        hint: '通用：劝降等级+1 + 升级劝降护符；并掷出 6 种增强之一',
+        effect: ['persuadeLevel+1', 'upgradePersuadeAmulets'],
         diceTable: [
           { id: 'persuade-dice-level', range: [1, 4], label: '劝降等级 +1', effect: 'persuadeLevel+1' },
           { id: 'persuade-dice-cost', range: [5, 8], label: '劝降费用永久 -2', effect: 'persuadeCost-2' },
@@ -2408,17 +2411,21 @@ export function createDeck(
     eventChoices: [
       {
         id: 'shrine-roll-dice',
-        text: '掷出赋能骰：侧击劝降-1/侧击击晕+5%/转型抽2/转型回2血/侧击伤害5/上手回1血',
+        text: '掷出赋能骰：侧击劝降-1/侧击击晕+5%/转型抽2/侧击回2血/侧击伤害5/上手回1血/上手金币+2',
         hint: '随机赋予一张手牌新的侧击/转型/上手效果',
         effect: 'noop',
         requires: [{ type: 'hand', min: 1, message: '需要至少 1 张手牌' }],
+        // 注：dice table 长度 > 3 时，`pruneEventChoicesToThree` 会在牌堆构建时随机抽 3 行
+        // 并重新映射为 [1,7]/[8,14]/[15,20]，所以下面的 range 值仅作"作者期望权重"文档
+        // 用，runtime 实际只看 3 行。新增 `shrine-onhand-gold`：每项现在 ~3/7 ≈ 43% 出现率。
         diceTable: [
           { id: 'shrine-flank-persuade', range: [1, 3] as [number, number], label: '侧击：劝降费用永久 -1', effect: 'grantFlankPersuadeCost:1' },
           { id: 'shrine-flank-stun', range: [4, 6] as [number, number], label: '侧击：击晕上限 +5%', effect: 'grantFlankStunCap:5' },
-          { id: 'shrine-transform-draw', range: [7, 9] as [number, number], label: '转型：抽 1 张牌', effect: 'grantTransformDraw:1' },
+          { id: 'shrine-transform-draw', range: [7, 9] as [number, number], label: '转型：抽 2 张牌', effect: 'grantTransformDraw:2' },
           { id: 'shrine-transform-heal', range: [10, 13] as [number, number], label: '侧击：恢复 2 HP', effect: 'grantFlankHeal:2' },
           { id: 'shrine-flank-damage', range: [14, 17] as [number, number], label: '侧击：对随机怪物造成 5 点伤害', effect: 'grantFlankDamage:5' },
           { id: 'shrine-onhand-heal', range: [18, 20] as [number, number], label: '上手：恢复 1 HP', effect: 'grantHandOnHandHeal:1' },
+          { id: 'shrine-onhand-gold', range: [1, 3] as [number, number], label: '上手：金币 +2', effect: 'grantHandOnHandGold:2' },
         ],
       },
       {

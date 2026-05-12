@@ -130,6 +130,8 @@ export function getOnEnterHandShortLabel(card: GameCardData): string | null {
       return '上手：+2% 击晕上限';
     case 'on-hand-heal-1':
       return '上手：+1 生命';
+    case 'on-hand-gold-2':
+      return '上手：+2 金币';
     case 'event-grant-onhand-temp-armor-1':
       return '上手：随机一栏 +1 临护甲';
     default:
