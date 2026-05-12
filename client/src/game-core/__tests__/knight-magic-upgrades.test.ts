@@ -963,7 +963,15 @@ describe('淬炼冲击 (overkill-upgrade) — initial prompt (resolveOverkillUpg
   });
 });
 
-describe('淬炼冲击 (overkill-upgrade) — overkill 触发 SET_UPGRADE_MODAL_OPEN', () => {
+describe('淬炼冲击 (overkill-upgrade) — overkill 触发 ENQUEUE_PENDING_UPGRADE_MODAL', () => {
+  // 历史：曾经直接 enqueue SET_UPGRADE_MODAL_OPEN，导致同一击杀的战利品 'upgradeCard'
+  // 奖励同帧也写 upgradeModalOpen=true → 两个升级请求合并成一次升级机会，玩家少一次升级。
+  // 修复：改走 pendingUpgradeModalOpens 队列，每条独立 maxCount，依次弹出。
+  // 见 `pendingUpgradeModalOpens` 字段 JSDoc。
+  //
+  // 测试断言改为「队列里有一条带正确 maxCount 的待开模态请求」，因为 monster reward
+  // 几乎必然同帧入 activeMonsterReward 充当 blocker（CHECK_PENDING_UPGRADE_MODAL gate 不过），
+  // 所以 drain 后 upgradeModalOpen 仍是 false（要等玩家清掉 reward 弹窗才会开）。
   function makeOk(level: number): GameCardData {
     return {
       id: `ok-overkill-l${level}`,
@@ -978,7 +986,7 @@ describe('淬炼冲击 (overkill-upgrade) — overkill 触发 SET_UPGRADE_MODAL_
     } as any;
   }
 
-  it('L0: 怪物 1 HP，3 dmg 超杀 → upgradeModalOpen=true，maxCount 不设置（=undefined）', () => {
+  it('L0: 怪物 1 HP，3 dmg 超杀 → pendingUpgradeModalOpens 有一条 maxCount=undefined 请求', () => {
     const card = makeOk(0);
     const state = makeState({
       handCards: [card],
@@ -989,11 +997,11 @@ describe('淬炼冲击 (overkill-upgrade) — overkill 触发 SET_UPGRADE_MODAL_
       afterPlay.state,
       [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'overkill-upgrade', monsterId: 'm1' } as GameAction],
     );
-    expect(result.state.upgradeModalOpen).toBe(true);
-    expect(result.state.upgradeModalMaxCount).toBeUndefined();
+    expect(result.state.pendingUpgradeModalOpens.length).toBe(1);
+    expect(result.state.pendingUpgradeModalOpens[0].maxCount).toBeUndefined();
   });
 
-  it('L1: 怪物 4 HP，5 dmg 超杀 → upgradeModalOpen=true，maxCount 不设置（=undefined）', () => {
+  it('L1: 怪物 4 HP，5 dmg 超杀 → pendingUpgradeModalOpens 有一条 maxCount=undefined 请求', () => {
     const card = makeOk(1);
     const state = makeState({
       handCards: [card],
@@ -1004,11 +1012,11 @@ describe('淬炼冲击 (overkill-upgrade) — overkill 触发 SET_UPGRADE_MODAL_
       afterPlay.state,
       [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'overkill-upgrade', monsterId: 'm1' } as GameAction],
     );
-    expect(result.state.upgradeModalOpen).toBe(true);
-    expect(result.state.upgradeModalMaxCount).toBeUndefined();
+    expect(result.state.pendingUpgradeModalOpens.length).toBe(1);
+    expect(result.state.pendingUpgradeModalOpens[0].maxCount).toBeUndefined();
   });
 
-  it('L2: 怪物 4 HP，5 dmg 超杀 → upgradeModalOpen=true + upgradeModalMaxCount=2', () => {
+  it('L2: 怪物 4 HP，5 dmg 超杀 → pendingUpgradeModalOpens 有一条 maxCount=2 请求', () => {
     const card = makeOk(2);
     const state = makeState({
       handCards: [card],
@@ -1019,11 +1027,11 @@ describe('淬炼冲击 (overkill-upgrade) — overkill 触发 SET_UPGRADE_MODAL_
       afterPlay.state,
       [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'overkill-upgrade', monsterId: 'm1' } as GameAction],
     );
-    expect(result.state.upgradeModalOpen).toBe(true);
-    expect(result.state.upgradeModalMaxCount).toBe(2);
+    expect(result.state.pendingUpgradeModalOpens.length).toBe(1);
+    expect(result.state.pendingUpgradeModalOpens[0].maxCount).toBe(2);
   });
 
-  it('L2: 怪物 100 HP，5 dmg 不超杀 → upgradeModalOpen=false（伤害正常落地）', () => {
+  it('L2: 怪物 100 HP，5 dmg 不超杀 → 不入队，upgradeModalOpen=false（伤害正常落地）', () => {
     const card = makeOk(2);
     const state = makeState({
       handCards: [card],
@@ -1036,6 +1044,7 @@ describe('淬炼冲击 (overkill-upgrade) — overkill 触发 SET_UPGRADE_MODAL_
     );
     const m = result.state.activeCards.find(c => c?.id === 'm1') as { hp: number } | undefined;
     expect(m?.hp).toBe(95);
+    expect(result.state.pendingUpgradeModalOpens.length).toBe(0);
     expect(result.state.upgradeModalOpen).toBeFalsy();
   });
 });

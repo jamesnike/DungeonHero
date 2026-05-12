@@ -194,6 +194,7 @@ export function createInitialGameState(): GameState {
     deleteModalOpen: false,
     upgradeModalOpen: false,
     upgradeModalMaxCount: undefined,
+    pendingUpgradeModalOpens: [],
     handMagicUpgradeModal: null,
     mirrorCopyModal: null,
     monsterFusionModal: null,

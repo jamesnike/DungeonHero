@@ -228,7 +228,13 @@ describe('淬炼冲击 (overkill-upgrade) overkill-bonus mitigation', () => {
     expect(result.state.upgradeModalOpen).toBeFalsy();
   });
 
-  it('negative control: no mitigation, 4 dmg overkills 3 hp → upgrade modal opens', () => {
+  it('negative control: no mitigation, 4 dmg overkills 3 hp → 升级模态请求入 pendingUpgradeModalOpens 队列', () => {
+    // 注：曾经 hero.ts case 'overkill-upgrade' 直接 enqueue SET_UPGRADE_MODAL_OPEN(true)，
+    // 此时测试断言 upgradeModalOpen === true 即可。但现在改走 pendingUpgradeModalOpens
+    // 队列（解决「淬炼冲击 + 战利品 upgradeCard 同帧合并成单次升级」的 bug，见
+    // `pendingUpgradeModalOpens` 字段 JSDoc），且击杀同时通常会入战利品 reward 队列，
+    // 充当 CHECK_PENDING_UPGRADE_MODAL 的 blocker → drain 后 upgradeModalOpen 依旧 false。
+    // 改为断言队列里有一条待开模态请求。
     const card = makeOverkillCard('plain');
     const golem = makeMonster('golem-2', 'Plain Golem', 3);
     const state = makeState({
@@ -243,7 +249,8 @@ describe('淬炼冲击 (overkill-upgrade) overkill-bonus mitigation', () => {
       [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'overkill-upgrade', monsterId: 'golem-2' } as GameAction],
     );
 
-    expect(result.state.upgradeModalOpen).toBe(true);
+    expect(result.state.pendingUpgradeModalOpens.length).toBe(1);
+    expect(result.state.pendingUpgradeModalOpens[0].maxCount).toBeUndefined();
   });
 });
 

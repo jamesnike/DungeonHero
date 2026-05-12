@@ -409,9 +409,19 @@ export function applyMonsterRewardPure(
         logMessage: `战利品：劝降成功率永久 +${amount ?? 0}%`,
       };
     case 'upgradeCard':
+      // 不直接 patch.upgradeModalOpen=true：同一击杀的 spell（淬炼冲击 / overkill-upgrade）
+      // 或 amulet（虫蜕之冠 / monster-kill-upgrade）可能已经 enqueue 了
+      // ENQUEUE_PENDING_UPGRADE_MODAL，两个 upgradeModalOpen 会合并成一次升级
+      // 机会，玩家少一次升级。
+      // 改走 pendingUpgradeModalOpens 队列后，'upgradeCard' reward 也只是 push 一条
+      // pending 请求，由 CHECK_PENDING_UPGRADE_MODAL 在合适时机依次弹出。
+      // 见 `pendingUpgradeModalOpens` 字段 JSDoc。
       return {
         patch: {
-          upgradeModalOpen: true,
+          pendingUpgradeModalOpens: [
+            ...state.pendingUpgradeModalOpens,
+            { banner: '选择一张牌进行升级。' },
+          ],
           heroSkillBanner: '选择一张牌进行升级。',
         },
         logMessage: '战利品：选择一张牌升级',

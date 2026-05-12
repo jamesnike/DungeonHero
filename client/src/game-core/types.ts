@@ -691,6 +691,41 @@ export interface GameState {
   upgradeModalOpen: boolean;
   upgradeModalMaxCount: number | undefined;
   /**
+   * 「升级模态」开模请求的延后队列。
+   *
+   * 历史 bug：`淬炼冲击` 超杀同一个怪物时，spell resolver 直接 enqueue
+   * `SET_UPGRADE_MODAL_OPEN(open=true)`，但该怪物的击杀同时把 `activeMonsterReward`
+   * 设上了战利品弹窗。两个弹窗同帧 open，玩家在战利品里选「升级一张牌」时
+   * `applyMonsterRewardPure` 又写了一次 `upgradeModalOpen=true`（已经是 true，no-op）
+   * → 两次「请求升级」合并成一次升级机会，第二张升级丢失。
+   * 同款问题影响 `虫蜕之冠`（amulet `monster-kill-upgrade`）—— 第 3 次击杀
+   * 同时触发战利品队列。
+   *
+   * 修复：把「击杀触发的升级模态」改走这个延后队列。每个条目独立，包含自己的
+   * `maxCount`（L0/L1 = undefined / 1 张升级；L2 = 2 张）。`CHECK_PENDING_UPGRADE_MODAL`
+   * 在以下时机 drain 队列头：
+   *   - APPLY_MONSTER_REWARD 之后（每个 reward 分支均会 enqueue）
+   *   - UPGRADE_CARD 关闭模态后
+   *   - SET_UPGRADE_MODAL_OPEN(open=false) 后（玩家手动关闭 / CardUpgradeModal 用完
+   *     maxCount 自动关闭）
+   *   - DEQUEUE_MONSTER_REWARD 把队列清空后
+   * 关键 gate：`activeMonsterReward != null` / `monsterRewardQueue.length > 0` /
+   * `discoverModalOpen` / `eventModalOpen` / `upgradeModalOpen === true` 任一为真都不开。
+   *
+   * 与 `honorSweepUpgradesPending`（战血横扫击杀奖励，单个累计 maxCount=N 一次性弹出）
+   * 是平行机制：honorSweep 是「N 个击杀合并一个模态」，本队列是「N 个独立模态依次弹出」。
+   */
+  pendingUpgradeModalOpens: Array<{
+    /**
+     * 该条目对应的 `upgradeModalMaxCount`：
+     * - `undefined`：玩家选 1 张升级即关闭模态（最常见，`淬炼冲击 L0/L1` / `虫蜕之冠`）
+     * - 数字：玩家可在同一模态内连续选 N 张升级（`淬炼冲击 L2` = 2）
+     */
+    maxCount?: number;
+    /** 可选：模态打开瞬间显示的 `heroSkillBanner`（用来区分来源，如「淬炼冲击：选择一张牌升级」）。 */
+    banner?: string;
+  }>;
+  /**
    * 秘法精炼（arcane-refine）：手牌魔法升级模态。
    *   - `sourceCardId`: 触发卡 id（在选择列表里被排除）
    *   - `maxSelect`: 玩家本次最多可选几张卡。法术回响（B）会传入 `2 * echoMultiplier`，

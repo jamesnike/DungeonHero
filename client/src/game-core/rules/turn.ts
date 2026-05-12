@@ -261,6 +261,7 @@ function reduceForceEndHeroTurn(
     deleteModalOpen: false,
     upgradeModalOpen: false,
     upgradeModalMaxCount: undefined,
+    pendingUpgradeModalOpens: [],
     handMagicUpgradeModal: null,
     mirrorCopyModal: null,
     monsterFusionModal: null,

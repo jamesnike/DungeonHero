@@ -2393,10 +2393,17 @@ function reduceMagicMonsterSelection(
           if (overkill) {
             // L2：maxCount=2 让升级模态保持打开，玩家连续选 2 张牌升级；
             // L0/L1 不指定（=undefined → 选 1 张就关闭）。
+            //
+            // 走 ENQUEUE_PENDING_UPGRADE_MODAL 而不是直接 SET_UPGRADE_MODAL_OPEN：
+            // 因为同一个超杀杀的怪物会同时触发战利品 reward 队列（含可能的
+            // 'upgradeCard' 奖励），两个 upgrade 模态同帧 open 会被 boolean
+            // upgradeModalOpen 字段合并成单次升级机会。pendingUpgradeModalOpens
+            // 队列让两个模态依次弹出。详见 `pendingUpgradeModalOpens` 字段
+            // JSDoc + `EnqueuePendingUpgradeModalAction` JSDoc。
             enqueuedActions.push({
-              type: 'SET_UPGRADE_MODAL_OPEN',
-              open: true,
+              type: 'ENQUEUE_PENDING_UPGRADE_MODAL',
               maxCount: okUpgradeCount > 1 ? okUpgradeCount : undefined,
+              banner: `淬炼冲击：选择${okCountText}升级。`,
             });
             okBanner = `淬炼冲击对 ${monster!.name} 造成 ${mitigation.effectiveDamage} 伤害，超杀！选择${okCountText}升级。`;
           } else {

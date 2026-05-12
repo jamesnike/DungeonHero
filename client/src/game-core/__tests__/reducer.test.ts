@@ -488,10 +488,14 @@ describe('reducer', () => {
       expect(result.state.stunCap).toBe(100);
     });
 
-    it('APPLY_MONSTER_REWARD upgradeCard opens modal', () => {
+    it('APPLY_MONSTER_REWARD upgradeCard pushes a pending upgrade modal request', () => {
+      // 历史：曾经直接 patch.upgradeModalOpen=true，但同一击杀的 spell（淬炼冲击）/
+      // amulet（虫蜕之冠）也想开升级模态时会被 boolean 字段合并成单次升级。
+      // 改走 pendingUpgradeModalOpens 队列，由 CHECK_PENDING_UPGRADE_MODAL 在合适
+      // 时机依次弹出。见 `pendingUpgradeModalOpens` 字段 JSDoc。
       const state = makeState({ upgradeModalOpen: false });
       const result = reduce(state, { type: 'APPLY_MONSTER_REWARD', rewardType: 'upgradeCard' });
-      expect(result.state.upgradeModalOpen).toBe(true);
+      expect(result.state.pendingUpgradeModalOpens.length).toBe(1);
     });
 
     it('APPLY_MONSTER_REWARD unknown type returns no change', () => {

@@ -1552,6 +1552,55 @@ export interface SetUpgradeModalOpenAction {
   maxCount?: number;
 }
 
+/**
+ * 把一次「升级模态」开模请求 push 进 `pendingUpgradeModalOpens` 队列，让
+ * `CHECK_PENDING_UPGRADE_MODAL` 在合适的时机依次弹出。
+ *
+ * 用于「击杀触发的升级机会」与「同一击杀的怪物战利品升级奖励」可能同帧产生
+ * 但需要分别弹出独立模态的场景，详见 `pendingUpgradeModalOpens` 字段 JSDoc。
+ *
+ * 已知调用方：
+ *   - `淬炼冲击`（hero.ts overkill-upgrade）
+ *   - `虫蜕之冠`（combat.ts amulet monster-kill-upgrade）
+ *   - `applyMonsterRewardPure` 的 `upgradeCard` 分支（shop.ts）
+ *
+ * 调用方**不应**再直接 dispatch `SET_UPGRADE_MODAL_OPEN(open=true)`——那会绕过队列
+ * 调度，回到「两个模态同帧 open 互相吞噬」的老 bug。
+ */
+export interface EnqueuePendingUpgradeModalAction {
+  type: 'ENQUEUE_PENDING_UPGRADE_MODAL';
+  /** 该次开模的 `upgradeModalMaxCount`（undefined = 单张升级；数字 = 连选 N 张）。 */
+  maxCount?: number;
+  /** 可选：模态打开瞬间显示的 `heroSkillBanner`（来源标签）。 */
+  banner?: string;
+}
+
+/**
+ * 检查是否能 drain 一条 `pendingUpgradeModalOpens` 队列头条目。
+ *
+ * Drain gate（任一为真都不开）：
+ *   - `upgradeModalOpen === true`（已经有一个模态开着，等它关）
+ *   - `activeMonsterReward != null`（战利品弹窗优先）
+ *   - `monsterRewardQueue.length > 0`（还有未弹出的战利品）
+ *   - `discoverModalOpen === true`（发现弹窗优先）
+ *   - `eventModalOpen === true`（事件弹窗优先）
+ *
+ * 如果 gate 全清且队列非空，pop 队列头并 enqueue
+ * `SET_UPGRADE_MODAL_OPEN(open=true, maxCount=entry.maxCount)`
+ * （顺带 set heroSkillBanner 如果 entry 带 banner）。
+ *
+ * 调用时机：
+ *   - APPLY_MONSTER_REWARD 末尾（每个 reward 弹完后让队列推进）
+ *   - DEQUEUE_MONSTER_REWARD 在 reward 队列清空后
+ *   - SET_UPGRADE_MODAL_OPEN(open=false) 之后（模态关闭让下一条弹出）
+ *   - SET_DISCOVER_MODAL(open=false) / SET_EVENT_MODAL_OPEN(open=false) 之后
+ *
+ * 幂等：gate 不通过时 no-op；队列空时 no-op。
+ */
+export interface CheckPendingUpgradeModalAction {
+  type: 'CHECK_PENDING_UPGRADE_MODAL';
+}
+
 export interface SetDiscoverModalAction {
   type: 'SET_DISCOVER_MODAL';
   open: boolean;
@@ -2324,6 +2373,8 @@ export type GameAction =
   | SetEventModalMinimizedAction
   | SetDeleteModalOpenAction
   | SetUpgradeModalOpenAction
+  | EnqueuePendingUpgradeModalAction
+  | CheckPendingUpgradeModalAction
   | SetDiscoverModalAction
   | SetShopModalOpenAction
   | SetShopModalMinimizedAction

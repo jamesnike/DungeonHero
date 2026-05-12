@@ -129,8 +129,62 @@ export function reduceUIStateActions(
 
     case 'SET_UPGRADE_MODAL_OPEN': {
       const patch: Partial<GameState> = { upgradeModalOpen: action.open };
+      // 历史：原本的语义是「action.maxCount === undefined 时不更新 upgradeModalMaxCount」
+      // ——这是为了让 echo×N 路径在中途多次刷新 maxCount 时不被错误清零。但同样的 sticky 行为
+      // 也意味着「关闭模态」时旧 maxCount 会一直留下来，下一次 open 拿不到正确的 undefined。
+      // 修法：仅在 open=false 时主动重置 maxCount=undefined（关闭模态后理应清空），
+      // open=true 仍然遵循旧的 sticky 语义（兼容 echo 升级模态多次开模）。
       if (action.maxCount !== undefined) {
         patch.upgradeModalMaxCount = action.maxCount;
+      } else if (!action.open) {
+        patch.upgradeModalMaxCount = undefined;
+      }
+      // Closing the upgrade modal? Drain the next pending upgrade-modal request
+      // (e.g. 「淬炼冲击 超杀升级」 + 「战利品·升级一张牌」 stacked from the same kill).
+      // 见 `pendingUpgradeModalOpens` JSDoc 与 `CHECK_PENDING_UPGRADE_MODAL` action JSDoc。
+      const enqueuedActions: GameAction[] = [];
+      if (!action.open && state.pendingUpgradeModalOpens.length > 0) {
+        enqueuedActions.push({ type: 'CHECK_PENDING_UPGRADE_MODAL' });
+      }
+      return applyPatch(state, patch, [], enqueuedActions.length > 0 ? enqueuedActions : undefined);
+    }
+
+    case 'ENQUEUE_PENDING_UPGRADE_MODAL': {
+      // 把开模请求 push 进队列，并立刻 enqueue 一条 CHECK 让它有机会立即弹出
+      // （gate 通过则马上开；否则等下一次 CHECK 时机被 drain）。
+      const next: GameState['pendingUpgradeModalOpens'] = [
+        ...state.pendingUpgradeModalOpens,
+        { maxCount: action.maxCount, banner: action.banner },
+      ];
+      return applyPatch(
+        state,
+        { pendingUpgradeModalOpens: next },
+        [],
+        [{ type: 'CHECK_PENDING_UPGRADE_MODAL' }],
+      );
+    }
+
+    case 'CHECK_PENDING_UPGRADE_MODAL': {
+      // Gate：任意 blocker 为真都不开。
+      if (state.pendingUpgradeModalOpens.length === 0) return null;
+      if (state.upgradeModalOpen) return null;
+      if (state.activeMonsterReward) return null;
+      if (state.monsterRewardQueue.length > 0) return null;
+      if (state.discoverModalOpen) return null;
+      if (state.eventModalOpen) return null;
+      // Pop 队列头开模。直接 patch upgradeModalOpen + upgradeModalMaxCount——不走
+      // SET_UPGRADE_MODAL_OPEN reducer——因为后者的 sticky maxCount 语义（action.maxCount
+      // === undefined 时不更新 maxCount，为 echo 升级保留旧 maxCount）会让"关闭模态后
+      // 又用 undefined maxCount 重开"的情况错继承上一条的 maxCount=N。
+      // 这里直接强制写入 head.maxCount，保证每条 pending 入口都拿到自己的 maxCount。
+      const [head, ...rest] = state.pendingUpgradeModalOpens;
+      const patch: Partial<GameState> = {
+        pendingUpgradeModalOpens: rest,
+        upgradeModalOpen: true,
+        upgradeModalMaxCount: head.maxCount,
+      };
+      if (head.banner !== undefined) {
+        patch.heroSkillBanner = head.banner;
       }
       return applyPatch(state, patch);
     }

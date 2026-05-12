@@ -342,7 +342,18 @@ function reduceUpgradeCard(
     { event: 'log:entry', payload: { type: 'shop', message: `卡牌升级：「${upgradedName || '卡牌'}」升级成功！` } },
   ];
 
-  return applyPatch(state, patch, sideEffects);
+  // 当 upgradeCardPure 因 maxCount==null 直接闭模态（patch.upgradeModalOpen=false）时，
+  // 这条 patch 不走 SET_UPGRADE_MODAL_OPEN reducer，CHECK_PENDING_UPGRADE_MODAL 不会被
+  // 自动 enqueue。手动补一条 CHECK 让 pendingUpgradeModalOpens 队列推进
+  // （另一种 maxCount=N 的多次升级路径，CardUpgradeModal 用完后自己 dispatch
+  // SET_UPGRADE_MODAL_OPEN(open=false)，CHECK 会从那条路径进，无需在这里补）。
+  // 见 `pendingUpgradeModalOpens` JSDoc。
+  const enqueuedActions: GameAction[] = [];
+  if (patch.upgradeModalOpen === false && state.pendingUpgradeModalOpens.length > 0) {
+    enqueuedActions.push({ type: 'CHECK_PENDING_UPGRADE_MODAL' });
+  }
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
 }
 
 function reduceApplyMonsterReward(
@@ -390,7 +401,17 @@ function reduceApplyMonsterReward(
     }
   }
 
-  const enqueuedActions: GameAction[] = [{ type: 'DEQUEUE_MONSTER_REWARD' }, { type: 'CHECK_HONOR_SWEEP_UPGRADES' }];
+  // CHECK_PENDING_UPGRADE_MODAL：让 pendingUpgradeModalOpens 队列在 reward 处理完
+  // 之后有机会推进。覆盖两条路径：
+  //   1. 'upgradeCard' reward 自身 push 了一条 pending 请求；DEQUEUE 之后 CHECK 把它弹出。
+  //   2. 之前 spell（淬炼冲击）或 amulet（虫蜕之冠）已 push 的 pending，在所有 reward
+  //      drain 完后 CHECK 弹出。CHECK 自带 gate 检查（reward 队列非空时不开），所以
+  //      多次 enqueue 是幂等的。
+  const enqueuedActions: GameAction[] = [
+    { type: 'DEQUEUE_MONSTER_REWARD' },
+    { type: 'CHECK_HONOR_SWEEP_UPGRADES' },
+    { type: 'CHECK_PENDING_UPGRADE_MODAL' },
+  ];
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);
 }

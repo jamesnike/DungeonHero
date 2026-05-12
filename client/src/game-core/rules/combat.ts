@@ -1305,12 +1305,18 @@ function reduceMonsterDefeated(
     const killProgress = (state.monsterKillUpgradeProgress ?? 0) + ae.monsterKillUpgradeCount;
     if (killProgress >= 3) {
       patch.monsterKillUpgradeProgress = 0;
-      patch.upgradeModalOpen = true;
       patch.amuletSlots = (state.amuletSlots as GameCardData[]).map(slot =>
         slot?.amuletEffect === 'monster-kill-upgrade' ? { ...slot, _counterDisplay: '0/3' } : slot,
       ) as AmuletItem[];
       sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: '虫蜕之冠：击杀 3 个怪物，可升级 1 张牌！' } });
-      patch.heroSkillBanner = '虫蜕之冠发动：选择一张牌升级！';
+      // 走 ENQUEUE_PENDING_UPGRADE_MODAL 而不是直接 patch.upgradeModalOpen=true：
+      // 同一击杀同时入战利品 reward 队列（含可能的 'upgradeCard' 奖励），
+      // 两个升级模态同帧 open 会被 boolean upgradeModalOpen 字段合并成单次升级。
+      // 见 `pendingUpgradeModalOpens` 字段 JSDoc。
+      enqueuedActions.push({
+        type: 'ENQUEUE_PENDING_UPGRADE_MODAL',
+        banner: '虫蜕之冠发动：选择一张牌升级！',
+      });
     } else {
       patch.monsterKillUpgradeProgress = killProgress;
       patch.amuletSlots = (state.amuletSlots as GameCardData[]).map(slot =>

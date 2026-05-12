@@ -435,6 +435,14 @@ function isInputContinuation(action: GameAction): boolean {
     case 'SET_COMBAT_FLAG':
     case 'SET_GAMBIT_STATE':
     case 'SET_UPGRADE_MODAL_OPEN':
+    // Pending upgrade modal queue — enqueued by 淬炼冲击 (overkill-upgrade) /
+    // 虫蜕之冠 (monster-kill-upgrade) / 'upgradeCard' loot when an upgrade
+    // modal request collides with an active reward / discover / event modal.
+    // Both must drain in 'playerInput' phase, otherwise the queue strands and
+    // the second sequential upgrade modal never opens after the player
+    // dismisses the first one (see `pendingUpgradeModalOpens` JSDoc).
+    case 'ENQUEUE_PENDING_UPGRADE_MODAL':
+    case 'CHECK_PENDING_UPGRADE_MODAL':
     case 'CHECK_HORDE_SWARM':
     case 'CHECK_ELITE_GOLD_BUFF':
     // Monster enter-effect dispatch — enqueued by APPLY_WATERFALL_DROP /
