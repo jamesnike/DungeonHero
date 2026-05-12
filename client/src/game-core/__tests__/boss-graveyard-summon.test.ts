@@ -275,3 +275,96 @@ describe('Boss 召唤 — 召唤的怪物恢复 1 血层', () => {
     expect(byId['grave-m2']!.currentLayer).toBe(2);
   });
 });
+
+describe('Boss 召唤 — 优先选择非小虫子的 monster', () => {
+  it('坟场有 2 非小虫子 + 多只小虫子时，召唤的 2 张 monster 都不是小虫子', () => {
+    const boss = makeBoss();
+    const dragon = makeMonster('grave-dragon', '巨龙', { fury: 3, hpLayers: 3 });
+    const skeleton = makeMonster('grave-skeleton', '骷髅', { fury: 1, hpLayers: 1 });
+    const buglet1 = makeMonster('grave-buglet-1', '小虫子', { fury: 1, hpLayers: 1, isBuglet: true });
+    const buglet2 = makeMonster('grave-buglet-2', '小虫子', { fury: 1, hpLayers: 1, isBuglet: true });
+    const buglet3 = makeMonster('grave-buglet-3', '小虫子', { fury: 1, hpLayers: 1, isBuglet: true });
+    const buglet4 = makeMonster('grave-buglet-4', '小虫子', { fury: 1, hpLayers: 1, isBuglet: true });
+
+    const state = makeState({
+      activeCards: [boss, null, null, null] as any,
+      activeCardStacks: {},
+      discardedCards: [buglet1, dragon, buglet2, skeleton, buglet3, buglet4],
+      combatState: { ...initialCombatState, engagedMonsterIds: [] },
+    });
+
+    const r = reduce(state, {
+      type: 'BEGIN_COMBAT',
+      monster: boss,
+      initiator: 'player',
+    } as any);
+
+    const next = r.state;
+    const summonedMonsters = next.activeCards.filter(c => c?.type === 'monster' && c.id !== boss.id);
+    expect(summonedMonsters.length).toBe(2);
+    // 关键断言：召唤的两只 monster 都是非小虫子（巨龙 + 骷髅），不应该是 buglet。
+    for (const m of summonedMonsters) {
+      expect(m!.isBuglet).not.toBe(true);
+    }
+    const summonedIds = summonedMonsters.map(m => m!.id).sort();
+    expect(summonedIds).toEqual(['grave-dragon', 'grave-skeleton']);
+  });
+
+  it('坟场只有 1 张非小虫子时，第 2 张 monster 才能从小虫子里抽（兜底）', () => {
+    const boss = makeBoss();
+    const dragon = makeMonster('grave-dragon', '巨龙', { fury: 3, hpLayers: 3 });
+    const buglet1 = makeMonster('grave-buglet-1', '小虫子', { fury: 1, hpLayers: 1, isBuglet: true });
+    const buglet2 = makeMonster('grave-buglet-2', '小虫子', { fury: 1, hpLayers: 1, isBuglet: true });
+
+    const state = makeState({
+      activeCards: [boss, null, null, null] as any,
+      activeCardStacks: {},
+      discardedCards: [buglet1, dragon, buglet2],
+      combatState: { ...initialCombatState, engagedMonsterIds: [] },
+    });
+
+    const r = reduce(state, {
+      type: 'BEGIN_COMBAT',
+      monster: boss,
+      initiator: 'player',
+    } as any);
+
+    const next = r.state;
+    const summonedMonsters = next.activeCards.filter(c => c?.type === 'monster' && c.id !== boss.id);
+    expect(summonedMonsters.length).toBe(2);
+    // 巨龙必被选中（唯一的非小虫子，优先抽）；另一只是从两只小虫子里随机抽 1 只。
+    const dragonSummoned = summonedMonsters.find(m => m!.id === 'grave-dragon');
+    expect(dragonSummoned).toBeDefined();
+    const otherSummoned = summonedMonsters.find(m => m!.id !== 'grave-dragon');
+    expect(otherSummoned).toBeDefined();
+    expect(otherSummoned!.isBuglet).toBe(true);
+  });
+
+  it('坟场全是小虫子时，仍然召唤 2 只小虫子（保底，不会少召唤）', () => {
+    const boss = makeBoss();
+    const buglet1 = makeMonster('grave-buglet-1', '小虫子', { fury: 1, hpLayers: 1, isBuglet: true });
+    const buglet2 = makeMonster('grave-buglet-2', '小虫子', { fury: 1, hpLayers: 1, isBuglet: true });
+    const buglet3 = makeMonster('grave-buglet-3', '小虫子', { fury: 1, hpLayers: 1, isBuglet: true });
+
+    const state = makeState({
+      activeCards: [boss, null, null, null] as any,
+      activeCardStacks: {},
+      discardedCards: [buglet1, buglet2, buglet3],
+      combatState: { ...initialCombatState, engagedMonsterIds: [] },
+    });
+
+    const r = reduce(state, {
+      type: 'BEGIN_COMBAT',
+      monster: boss,
+      initiator: 'player',
+    } as any);
+
+    const next = r.state;
+    const summonedMonsters = next.activeCards.filter(c => c?.type === 'monster' && c.id !== boss.id);
+    // 没有非小虫子可选，不能少召唤——仍然要召唤 2 只小虫子。
+    expect(summonedMonsters.length).toBe(2);
+    for (const m of summonedMonsters) {
+      expect(m!.isBuglet).toBe(true);
+    }
+  });
+});

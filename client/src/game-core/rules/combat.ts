@@ -291,15 +291,31 @@ function reduceBeginCombat(
         ? Math.min(2, remainingBudget)
         : 0;
 
-      const graveyardMonsters = graveyardCopy.filter(c => c.type === 'monster');
+      // Buglet de-prioritization: 玩家直觉「召唤亡灵」≈ 把死掉的强力怪物拉回来打你，
+      // 而不是再叫一群小虫子占场。因此把坟场怪物分成「非小虫子优先池」+「小虫子兜底池」，
+      // 优先从前者随机抽；只有非小虫子全部抽干仍未满 monsterTarget 时，再从小虫子里抽。
+      const graveyardMonstersAll = graveyardCopy.filter(c => c.type === 'monster');
+      const graveyardNonBuglets = graveyardMonstersAll.filter(c => c.isBuglet !== true);
+      const graveyardBuglets = graveyardMonstersAll.filter(c => c.isBuglet === true);
       const graveyardOthers = graveyardCopy.filter(c => c.type !== 'monster');
 
       const rawMonsters: import('@/components/GameCard').GameCardData[] = [];
-      const monstersToPick = Math.min(monsterTarget, graveyardMonsters.length);
-      for (let i = 0; i < monstersToPick; i++) {
+      const monstersToPick = Math.min(monsterTarget, graveyardMonstersAll.length);
+
+      // Step 1: pull from non-buglet pool first.
+      const nonBugletPicks = Math.min(monstersToPick, graveyardNonBuglets.length);
+      for (let i = 0; i < nonBugletPicks; i++) {
         let ri: number;
-        [ri, rng] = nextInt(rng, 0, graveyardMonsters.length - 1);
-        rawMonsters.push(graveyardMonsters.splice(ri, 1)[0]);
+        [ri, rng] = nextInt(rng, 0, graveyardNonBuglets.length - 1);
+        rawMonsters.push(graveyardNonBuglets.splice(ri, 1)[0]);
+      }
+
+      // Step 2: fall back to buglets only if non-buglets ran out.
+      const bugletPicks = monstersToPick - nonBugletPicks;
+      for (let i = 0; i < bugletPicks; i++) {
+        let ri: number;
+        [ri, rng] = nextInt(rng, 0, graveyardBuglets.length - 1);
+        rawMonsters.push(graveyardBuglets.splice(ri, 1)[0]);
       }
 
       const rawNonMonsters: import('@/components/GameCard').GameCardData[] = [];

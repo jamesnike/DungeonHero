@@ -24,13 +24,12 @@ import {
   BALANCE_SHIELD_BONUS,
   BALANCE_ATTACK_PENALTY,
   BALANCE_SHIELD_PENALTY,
-  BASE_BACKPACK_CAPACITY,
 } from '../constants';
-import { pushRecycleRestoreSideEffects } from '../cards';
+import { pushRecycleRestoreSideEffects, getEffectiveBackpackCapacity } from '../cards';
 import { computeAmuletEffectsForState, applySlotArmorBonusDelta } from '../equipment';
 import { hasEternalRelic } from '@/lib/eternalRelics';
 import type { RngState } from '../rng';
-import { nextInt } from '../rng';
+import { nextInt, shuffle } from '../rng';
 import type { GameCardData } from '@/components/GameCard';
 import { cardHasPermFlag } from '@/components/GameCard';
 import type { EquipmentItem, AmuletItem, EquipmentSlotId } from '@/components/game-board/types';
@@ -85,25 +84,63 @@ function reduceEndTurn(
     playerTurnStartedAt: null,
   };
 
-  // Eternal relic·幽魂净化 — at every hero turn end, flush the recycle bag
-  // back into the backpack (no usage limit). Cards that don't fit the backpack
-  // capacity stay in the bag for next turn.
+  // Eternal relic·幽魂净化 — at every hero turn end, randomly select floor(N/2)
+  // cards from the recycle bag and decrement their `_recycleWaits` by 1.
+  // Cards whose counter falls to 0 (or below) are immediately restored to the
+  // backpack (subject to capacity + 「置顶」prepend rules). Untouched cards
+  // (the other ceil(N/2) half) remain in the bag unchanged.
+  //
+  // Boundary behaviour: bag size 1 → floor(1/2) = 0 selected → noop, no log,
+  // no banner. Bag empty → noop. This is the explicit «ok-floor» semantic
+  // chosen by the user when the relic was redesigned (see commit history).
+  //
+  // RNG: selection uses a `state.rng`-driven shuffle so replays are
+  // deterministic and `patch.rng` is updated. All other recycle-bag paths
+  // (waterfall auto −1, processRecycleBag callers) are deterministic
+  // because they touch every card; this relic is the only path that picks
+  // a random subset, hence the explicit shuffle.
   if (hasEternalRelic(state.eternalRelics ?? [], 'wraith-purification')) {
     const bag = state.permanentMagicRecycleBag as (GameCardData & { _recycleWaits?: number })[];
-    if (bag.length > 0) {
-      const cleaned: GameCardData[] = bag.map(card => {
-        const { _recycleWaits, ...rest } = card;
-        return rest as GameCardData;
-      });
-      const capacity = Math.max(1, BASE_BACKPACK_CAPACITY + (state.backpackCapacityModifier ?? 0));
+    const selectCount = Math.floor(bag.length / 2);
+    if (bag.length > 0 && selectCount > 0) {
+      // Shuffle indices to pick a random subset of size `selectCount`.
+      // We shuffle indices (not the bag itself) so the surviving order of
+      // un-touched cards in the bag is preserved.
+      const indices = Array.from({ length: bag.length }, (_, i) => i);
+      const [shuffledIndices, rng2] = shuffle(indices, patch.rng ?? state.rng);
+      const selectedIdxSet = new Set(shuffledIndices.slice(0, selectCount));
+
+      const ready: GameCardData[] = [];
+      const stillWaiting: (GameCardData & { _recycleWaits?: number })[] = [];
+      for (let i = 0; i < bag.length; i++) {
+        const card = bag[i];
+        if (selectedIdxSet.has(i)) {
+          // Mirror processRecycleBag's decrement-first semantics: subtract 1,
+          // then anything ≤ 0 is ready to return.
+          const newWaits = (card._recycleWaits ?? 1) - 1;
+          if (newWaits <= 0) {
+            const { _recycleWaits: _omit, ...clean } = card as GameCardData & {
+              _recycleWaits?: number;
+            };
+            ready.push(clean as GameCardData);
+          } else {
+            stillWaiting.push({ ...card, _recycleWaits: newWaits });
+          }
+        } else {
+          stillWaiting.push(card);
+        }
+      }
+
+      const capacity = getEffectiveBackpackCapacity(state);
       const currentBackpack = state.backpackItems as GameCardData[];
       const available = Math.max(0, capacity - currentBackpack.length);
-      const toRestore = cleaned.slice(0, available);
-      const overflow = cleaned.slice(available);
-      // 「置顶」关键词分流：toRestore 切两半，置顶 → backpackItems[0]（prepend），
-      // 其余 → backpackItems 末尾（append）。两组都进背包，**不再**走 remainingDeck。
-      // 这条路径不走 processRecycleBag（幽魂净化是「即时洗回，不递减 _recycleWaits」的特殊
-      // 路径），所以手动复刻 cards.ts processRecycleBag 的分流逻辑。
+      const toRestore = ready.slice(0, available);
+      const overflow = ready.slice(available);
+
+      // 「置顶」关键词分流：与 processRecycleBag 保持一致——toRestore 切两半，
+      // 置顶 → backpackItems[0]（prepend），其余 → backpackItems 末尾（append）。
+      // 这条路径仍是非 processRecycleBag 流（只动一半的卡，不批处理），所以手动
+      // 复刻 cards.ts processRecycleBag 的分流逻辑。
       const restoredToBackpackTop: GameCardData[] = [];
       const restoredToBackpack: GameCardData[] = [];
       for (const c of toRestore) {
@@ -111,23 +148,31 @@ function reduceEndTurn(
         else restoredToBackpack.push(c);
       }
       patch.backpackItems = [...restoredToBackpackTop, ...currentBackpack, ...restoredToBackpack];
-      patch.permanentMagicRecycleBag = overflow as GameCardData[];
+      patch.permanentMagicRecycleBag = [...overflow, ...stillWaiting] as GameCardData[];
+      patch.rng = rng2;
+
+      const restoredText = toRestore.length > 0
+        ? `，其中 ${toRestore.length} 张洗回背包：${toRestore.map(c => c.name).join('、')}`
+        : '';
+      sideEffects.push({
+        event: 'log:entry',
+        payload: {
+          type: 'skill',
+          message: `幽魂净化：回合结束，回收袋 ${selectCount} 张牌瀑流计时 -1${restoredText}。`,
+        },
+      });
+      sideEffects.push({
+        event: 'ui:banner',
+        payload: {
+          text: toRestore.length > 0
+            ? `幽魂净化：${selectCount} 张瀑流计时 -1，${toRestore.length} 张洗回背包！`
+            : `幽魂净化：${selectCount} 张牌瀑流计时 -1。`,
+        },
+      });
       if (toRestore.length > 0) {
-        sideEffects.push({
-          event: 'log:entry',
-          payload: {
-            type: 'skill',
-            message: `幽魂净化：回合结束，回收袋 ${toRestore.length} 张牌洗回背包：${toRestore.map(c => c.name).join('、')}`,
-          },
-        });
-        sideEffects.push({
-          event: 'ui:banner',
-          payload: { text: `幽魂净化：${toRestore.length} 张牌从回收袋洗回背包！` },
-        });
-        // 跟 waterfall 路径保持同样的 UI 通知：触发 BackpackZone 的绿色回收环动画 +
-        // 「置顶」卡的二段反馈。同步参考：rules/waterfall.ts、rules/magic-effects.ts 的
-        // STARTER_CARD_IDS.recycleDrawMagic、card-schema/definitions/magic.ts 的
-        // starter:recycleDrawMagic、虚空置换 (void-swap)。
+        // 跟 waterfall / 回收余韵 / 回收灵焰 / 洗册归川 / 虚空置换 / 通用
+        // RESTORE_RECYCLE_BAG 共用同一套 UI 通知：BackpackZone 绿色回收环动画 +
+        // 「置顶」卡的二段反馈。
         pushRecycleRestoreSideEffects(sideEffects, {
           restored: toRestore,
           restoredToBackpackTop,
@@ -138,7 +183,7 @@ function reduceEndTurn(
           event: 'log:entry',
           payload: {
             type: 'skill',
-            message: `幽魂净化：背包已满，${overflow.length} 张牌留在回收袋等待。`,
+            message: `幽魂净化：背包已满，${overflow.length} 张已就绪的牌留在回收袋等待。`,
           },
         });
       }

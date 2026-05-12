@@ -138,12 +138,13 @@ describe('INIT_GAME preview row composition', () => {
     expect(violations).toEqual([]);
   });
 
-  it('all Wraiths land in the first 12 cards of deckWithClassEvents (= preview + remainingDeck[0..8))', () => {
-    // `deckWithClassEvents[0..12)` in init.ts coordinates corresponds to the
-    // procedural-dungeon flat sequence preview ∪ remainingDeck[0..8) — the
-    // active row is the fixed Buglet+Events tutorial row and is NOT part of
-    // deckWithClassEvents. Both non-elite and elite Wraiths must land in
-    // this 12-card prefix.
+  it('all Wraiths land in deck positions 9..16 of deckWithClassEvents (= indices [8, 16) = remainingDeck[4..12))', () => {
+    // `deckWithClassEvents[8..16)` in init.ts coordinates corresponds to the
+    // procedural-dungeon flat sequence remainingDeck[4..12) — the active row
+    // is the fixed Buglet+Events tutorial row and is NOT part of
+    // deckWithClassEvents, and the previewCards (chunk 0) sit at indices
+    // 0..3. Both non-elite and elite Wraiths must land in indices 8..15
+    // (inclusive) = positions 9..16 (1-indexed inclusive).
     const violations: Array<{
       seed: number;
       pos: number;
@@ -169,7 +170,7 @@ describe('INIT_GAME preview row composition', () => {
         const c = deckWithClassEvents[i];
         if (c?.type === 'monster' && c.monsterType === 'Wraith') {
           foundWraithInRun = true;
-          if (i >= 12) {
+          if (i < 8 || i >= 16) {
             violations.push({
               seed,
               pos: i,
@@ -193,7 +194,7 @@ describe('INIT_GAME preview row composition', () => {
     // The multiplayer shared-deck builder uses an independent verbatim port
     // of the layout block, so we need a separate assertion to keep both
     // paths in sync. Same coordinate system: the full shared deck is the
-    // analogue of `deckWithClassEvents`, so all Wraiths must land in [0,12).
+    // analogue of `deckWithClassEvents`, so all Wraiths must land in [8, 16).
     const violations: Array<{
       seed: number;
       pos: number;
@@ -208,7 +209,7 @@ describe('INIT_GAME preview row composition', () => {
         const c = deck[i];
         if (c?.type === 'monster' && c.monsterType === 'Wraith') {
           foundWraithInRun = true;
-          if (i >= 12) {
+          if (i < 8 || i >= 16) {
             violations.push({
               seed,
               pos: i,

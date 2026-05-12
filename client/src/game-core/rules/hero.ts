@@ -41,7 +41,7 @@ import { computeAmuletEffectsForState, getEquipmentInSlot, getSlotBonus, applySl
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { applyFlipCounters } from './flip-counters';
 import { nextInt, pickRandom } from '../rng';
-import { damageMonsterWithLayerOverflow, computeEffectiveSpellDamageOnMonster, detectMineCollisionsAfterShuffle } from '../combat';
+import { damageMonsterWithLayerOverflow, computeEffectiveSpellDamageOnMonster, computeDamage, detectMineCollisionsAfterShuffle } from '../combat';
 import { isMonsterMagicImmuneByBuilding, getEquipmentSlotsWithSuppressedTempAttack } from '../buildingAura';
 import { applyMonsterRage } from '@/lib/monsterRage';
 
@@ -2126,16 +2126,37 @@ function reduceMagicMonsterSelection(
   // (so bloodrage / revive-blessing / self-damage-draw / totalDamageTaken still
   // fire on the hp-loss portion). When target is the hero cell, we keep the
   // original direct enqueue.
-  const applySelfDamage = (damage: number, source: string): void => {
-    if (damage <= 0) return;
+  //
+  // Returns `{ actualDamage }` — the amount that **actually landed** on the
+  // hero side (shield armor consumed + tempShield consumed + hero HP lost).
+  // Death-ward fully negates → 0. Used by 点金裁决 (blood-reckoning) to
+  // heal by the real damage dealt rather than the nominal totalDamage.
+  // Pure-preview math; no state mutation beyond what the closures already do.
+  const previewHeroDamage = (s: GameState, raw: number): number => {
+    if (raw <= 0) return 0;
+    const ae = computeAmuletEffectsForState(s);
+    const handArr = s.handCards as GameCardData[];
+    const deathWardCard = handArr.find(
+      c => c.magicEffect === 'death-ward' || (c as { knightEffect?: string }).knightEffect === 'death-ward',
+    );
+    const r = computeDamage(s, raw, ae, !!deathWardCard, { selfInflicted: true });
+    return Math.max(0, r.shieldAbsorbed + r.appliedDamage);
+  };
+  const applySelfDamage = (damage: number, source: string): { actualDamage: number } => {
+    if (damage <= 0) return { actualDamage: 0 };
     if (isShieldSlotTarget && shieldSlotId) {
       const result = applyShieldSlotSelfDamage(state, shieldSlotId, damage, source);
       Object.assign(patch, result.patch);
       sideEffects.push(...result.sideEffects);
       enqueuedActions.push(...result.enqueuedActions);
-      return;
+      // 实际命中 = 盾 armor 吃下 (blocked) + 溢出真正落到 hero 侧 (tempShield + HP)
+      // applyShieldSlotSelfDamage 不改 state.tempShield / state.hp，所以可以
+      // 直接用原 state 预览溢出走 APPLY_DAMAGE 后的结果。
+      const actual = result.blocked + previewHeroDamage(state, result.overflow);
+      return { actualDamage: actual };
     }
     enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: damage, source, selfInflicted: true });
+    return { actualDamage: previewHeroDamage(state, damage) };
   };
 
   switch (pending.effect) {
@@ -2157,26 +2178,44 @@ function reduceMagicMonsterSelection(
     }
 
     case 'blood-reckoning': {
+      // 卡面文案：「造成等同于当前金币数量的伤害，并恢复等量生命」。
+      // 「等量」= **实际造成的伤害**（玩家直觉「打了多少回多少」），不是 totalDamage：
+      //  - 怪物目标：镜像 reducer 的减免链（诅咒碑免疫 / 虫盾 / 法抗 / Golem 单次伤害 cap）
+      //    + 单层 HP cap（overflow 不串层 → 多余的伤害浪费，不算回血）
+      //  - 自伤目标：实际"命中"hero 侧的总量（盾 armor + tempShield + HP loss）；
+      //    死守 / 不灭守护 完全抵消 → 0 回血。
+      //  自伤分支仍然先 APPLY_DAMAGE 让 reduceApplyDamage 触发血怒战符 / 复生赐福 /
+      //  赎血召牌符 / totalDamageTaken 簿记，HEAL 走 actualDamage。
       const echo = (pending as any).echoMultiplier ?? 1;
       const totalDamage = computeSpellDamagePure(state, state.gold + (pending.card.amplifyBonus ?? 0)) * echo;
-      const healText = totalDamage > 0 ? `，恢复 ${totalDamage} 点生命` : '';
       const echoText = echo > 1 ? '（回响×2）' : '';
+      let actualDamage = 0;
       if (isHeroTarget) {
-        // 自伤路径：先 APPLY_DAMAGE selfInflicted（触发血怒战符），再 HEAL 等量。
-        // 净 HP 变化 0，但 reduceApplyDamage 内部 appliedDamage > 0，所以 bloodrage 仍会触发。
-        // 选盾时 applySelfDamage 会先让盾 armor 吃伤，溢出才走 APPLY_DAMAGE；HEAL 仍按整额给。
         if (totalDamage > 0) {
-          applySelfDamage(totalDamage, 'blood-reckoning');
-          enqueuedActions.push({ type: 'HEAL', amount: totalDamage, source: 'blood-reckoning' });
+          const r = applySelfDamage(totalDamage, 'blood-reckoning');
+          actualDamage = r.actualDamage;
+          if (actualDamage > 0) {
+            enqueuedActions.push({ type: 'HEAL', amount: actualDamage, source: 'blood-reckoning' });
+          }
         }
+        const healText = actualDamage > 0 ? `，恢复 ${actualDamage} 点生命` : '';
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          `点金裁决对${targetName}造成 ${totalDamage} 点伤害${healText}！${echoText}`, { dealtDamage: true });
+          `点金裁决对${targetName}造成 ${actualDamage} 点伤害${healText}！${echoText}`, { dealtDamage: true });
       }
       ensureEngaged(state, monster!, enqueuedActions);
+      // 减免链 + 单层 HP cap → 实际造成的伤害。helper 严格镜像 reducer 链；
+      // 若 reducer 增加了新减免（spell-damage mitigation），该 helper 也必须同步更新，
+      // 否则这里会回血对不上。参考 spell-overkill-mitigation.test.ts 的同款 pattern。
+      const mit = computeEffectiveSpellDamageOnMonster(state, monster!.id, totalDamage);
+      const monsterHp = Math.max(0, monster!.hp ?? monster!.value ?? 0);
+      actualDamage = Math.min(mit.effectiveDamage, monsterHp);
       enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'blood-reckoning', isSpellDamage: true });
-      enqueuedActions.push({ type: 'HEAL', amount: totalDamage, source: 'blood-reckoning' });
+      if (actualDamage > 0) {
+        enqueuedActions.push({ type: 'HEAL', amount: actualDamage, source: 'blood-reckoning' });
+      }
+      const healText = actualDamage > 0 ? `，恢复 ${actualDamage} 点生命` : '';
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `点金裁决造成 ${totalDamage} 点伤害${healText}！${echoText}`);
+        `点金裁决造成 ${actualDamage} 点伤害${healText}！${echoText}`);
     }
 
     case 'bounty-spell-damage': {

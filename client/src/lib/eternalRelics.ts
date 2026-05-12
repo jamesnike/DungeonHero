@@ -19,8 +19,8 @@ import relicWraithPurificationImage from '@assets/generated_images/cute_chibi_wr
 import relicPersuadeSameHalveImage from '@assets/generated_images/relic_persuade_same_halve.png';
 import relicPersuadeRaceBonusImage from '@assets/generated_images/relic_persuade_race_bonus.png';
 import relicPersuadeDurabilityImage from '@assets/generated_images/relic_persuade_durability.png';
-// TODO(art): replace with a dedicated icon for 永恒护符·装备超频.
-import relicEquipOverclockImage from '@assets/generated_images/knight_potion_equip_empower.png';
+import relicEquipOverclockImage from '@assets/generated_images/knight_potion_equip_overclock.png';
+import relicSummonFrenzyImage from '@assets/generated_images/knight_potion_frenzy_discover.png';
 
 const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
   'waterfall-discover': {
@@ -110,7 +110,7 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
   'wraith-purification': {
     id: 'wraith-purification',
     name: '永恒护符·幽魂净化',
-    description: '每当玩家回合结束时，将回收袋所有牌洗回背包（无次数限制）。',
+    description: '每当玩家回合结束时，回收袋中半数（向下取整）的牌瀑流计时 -1。',
     image: relicWraithPurificationImage,
   },
   'persuade-same-halve': {
@@ -172,7 +172,7 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
     id: 'summon-frenzy',
     name: '永恒护符·狂热发现',
     description: '光环（可叠加）：每持有一份「狂热发现」，使用「专属感召」时若背包牌数 > 10，则额外多触发 1 次发现；牌数 ≤ 10 立即失效。',
-    image: relicWaterfallDiscoverImage,
+    image: relicSummonFrenzyImage,
   },
 };
 

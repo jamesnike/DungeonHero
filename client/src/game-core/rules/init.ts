@@ -221,29 +221,33 @@ export function reduceInitGame(
     }
   }
 
-  // --- Pull all Wraiths into the first 12 cards (= first 3 chunks) ---
+  // --- Pull all Wraiths into deck positions 9..16 (= indices [8, 16)) ---
   // Wraith's defining trait is its `returnToDeck` waterfall — it cycles back
   // into the deck instead of going to the graveyard, which makes it the key
-  // gate for the 幽魂净化 eternal relic clearance loop. Guaranteeing Wraith(s)
-  // land in the first 3 chunks (= preview row + remainingDeck[0..8)) ensures
-  // the player encounters them early enough for the mechanic to engage.
+  // gate for the 幽魂净化 eternal relic clearance loop. Reserving Wraiths to
+  // positions 9..16 (1-indexed, inclusive) puts them in chunks 3 and 4
+  // (= remainingDeck[4..12) in player-facing coordinates) — the player
+  // encounters them after the immediate preview row but still early enough
+  // for the mechanic to engage during the run.
   //
   // Both non-elite AND elite Wraiths are pulled here — Wraith is the EXPLICIT
-  // exception to the "elites stay out of first 16" rule above. Each chunk
-  // holds at most one monster, so at most 3 Wraiths can fit in [0,12) — but
-  // the deck contains at most 2 Wraiths (1 non-elite + optionally 1 elite),
-  // so the swap target search always succeeds.
+  // exception to the "elites stay out of first 16" rule above. The window
+  // spans 2 chunks (each chunk holds at most one monster), so up to 2 Wraiths
+  // can fit in [8,16) — matching the deck's max Wraith population (1 non-elite
+  // + optionally 1 elite).
   //
   // Runs AFTER elite-push so any elite-Wraith just relocated to ≥16 is
   // immediately pulled back; runs BEFORE the last-monster boss-bake so
   // `lastMonsterDeckIndex` reflects the post-swap arrangement (Boss may
   // therefore become a non-Wraith monster that was displaced backward).
-  const WRAITH_RESERVED_LIMIT = 12;
-  for (let i = WRAITH_RESERVED_LIMIT; i < deckWithClassEvents.length; i++) {
+  const WRAITH_RESERVED_START = 8; // inclusive — deck position 9 (1-indexed)
+  const WRAITH_RESERVED_END = 16;  // exclusive — deck position 16 (1-indexed) = index 15
+  for (let i = 0; i < deckWithClassEvents.length; i++) {
+    if (i >= WRAITH_RESERVED_START && i < WRAITH_RESERVED_END) continue;
     const c = deckWithClassEvents[i];
     if (c.type !== 'monster' || c.monsterType !== 'Wraith') continue;
     let swapTarget = -1;
-    for (let k = 0; k < WRAITH_RESERVED_LIMIT; k++) {
+    for (let k = WRAITH_RESERVED_START; k < WRAITH_RESERVED_END; k++) {
       const cand = deckWithClassEvents[k];
       if (cand.type === 'monster' && cand.monsterType !== 'Wraith') {
         swapTarget = k;

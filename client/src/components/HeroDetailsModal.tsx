@@ -71,7 +71,7 @@ const permanentSkillHints: Record<string, string> = {
   'Iron Skin': '所有护甲获得 +1 防御加成。',
   Bloodthirsty: '击杀怪物后回复 2 点生命值。',
   '潮涌铸甲': '永恒护符·瀑流铸剑 / 格挡铸甲（见下方子效果）。',
-  '幽魂净化': '当背包为空时，自动将回收袋里的牌洗回背包（没有使用上限）。',
+  '幽魂净化': '每当玩家回合结束时，回收袋中半数（向下取整）的牌瀑流计时 -1。',
 };
 
 const formatSignedValue = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
