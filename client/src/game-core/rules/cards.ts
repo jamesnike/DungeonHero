@@ -403,6 +403,74 @@ function reducePlayCard(
     // 咒纹刻印的 streak 自增统一在 reduceResolveMagic 里完成，
     // 这样可以同时覆盖 PLAY_CARD（点击播放）与 GameBoard.handleCardToHero
     // 直接 dispatch RESOLVE_MAGIC（拖动出牌）两条触发路径。
+  } else if (card.type === 'building' && (card.mineDamage ?? 0) > 0) {
+    // 「地雷」从手牌打出（通过其他效果如「坟场召回」类的卡进入手牌之后）：
+    // 行为完全镜像 lay-mine magic resolver（rules/magic-effects.ts case 'lay-mine'）：
+    //   - 候选池 = active row 空位 ∪ ghost building 格（uniform 随机抽 1 个）
+    //   - 落到 ghost 格时，原 ghost 沉到 activeCardStacks[col] 末尾，新地雷成为顶层
+    //   - 候选池为空（怪物/事件/非 ghost 建筑占满）→ fizzle，卡仍从手牌消耗（已在
+    //     函数顶部 patch.handCards 移除），banner 提示
+    //   - 卡本身（手牌的实例）就成为 active row 上的地雷，**不进坟场也不进回收袋**
+    //     （手牌 -1，地雷 -1 = 净位移）
+    // 不 enqueue echo / RESOLVE_MAGIC / FINALIZE_MAGIC_CARD / APPLY_TRANSFORM_CATEGORY
+    // —— 这是一次 building 直接放置，不是 magic 结算。flank 已在函数顶部处理。
+    const activeSlots = state.activeCards as (GameCardData | null)[];
+    const candidateIdxs: number[] = [];
+    for (let i = 0; i < activeSlots.length; i++) {
+      const c = activeSlots[i];
+      if (c === null || c.isGhost === true) candidateIdxs.push(i);
+    }
+
+    if (candidateIdxs.length === 0) {
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'event', message: `「${card.name}」：激活行无可用位置（既无空位也无幽灵建筑可堆叠），地雷未能放置。` },
+      });
+      sideEffects.push({
+        event: 'ui:banner',
+        payload: { text: `${card.name}：激活行无可用位置（既无空位也无幽灵建筑可堆叠）。` },
+      });
+    } else {
+      const [pickIdx, nextRng] = nextInt(state.rng, 0, candidateIdxs.length - 1);
+      const slotIdx = candidateIdxs[pickIdx];
+
+      const newActive = [...activeSlots];
+      const newStacks: Record<number, GameCardData[]> = { ...state.activeCardStacks };
+
+      const existing = newActive[slotIdx];
+      let stackNote = '';
+      if (existing) {
+        // 候选池保证 existing 必为 ghost building；推到 stack 末尾 = next-to-pop
+        // （跟 lay-mine resolver / 殒雷符 reducer.ts:303-304 同款 stack-on-top 写法）。
+        newStacks[slotIdx] = [...(newStacks[slotIdx] ?? []), existing];
+        stackNote = `（堆于 ${existing.name} 上）`;
+      }
+
+      // 卡本身作为地雷放到激活行；剥离手牌专用元数据（fromSlot / _recycleWaits）。
+      const { fromSlot: _drop1, _recycleWaits: _drop2, ...mineOnRow } =
+        card as GameCardData & { fromSlot?: string; _recycleWaits?: number };
+
+      newActive[slotIdx] = mineOnRow as GameCardData;
+
+      patch.activeCards = newActive as ActiveRowSlots;
+      patch.activeCardStacks = newStacks;
+      patch.rng = nextRng;
+
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'event', message: `${card.name}：手牌打出，布于槽 ${slotIdx + 1}${stackNote}。` },
+      });
+      sideEffects.push({
+        event: 'ui:banner',
+        payload: { text: `${card.name}：布下地雷于槽 ${slotIdx + 1}！` },
+      });
+      sideEffects.push({
+        event: 'magic:layMine',
+        payload: { slots: [{ idx: slotIdx, mineId: mineOnRow.id }], droppedCount: 0 },
+      });
+    }
+
+    patch.lastPlayedCardCategory = getCardPlayCategory(card);
   }
 
   // Notify transform/category update

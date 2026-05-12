@@ -679,6 +679,30 @@ function reduceDealDamageToMonster(
       payload: { monsterId: action.monsterId, damage: effectiveDamage, remainingHp: updated.hp ?? 0 },
     });
     sideEffects.push({ event: 'combat:monsterBleed', payload: { monsterId: action.monsterId, delay: 0 } });
+
+    // Overkill on buildings — same rule as monsters: damage exceeding current
+    // hp triggers overkill log + lifesteal heal. 击中建筑（含幽灵建筑：
+    // 增幅祭坛 / 命运之刃 / 诅咒碑 / 地雷；以及非幽灵建筑：破印祭坛）也算
+    // 超杀；computeOverkill 基于 monster.hp 计算，对 building 直接生效。
+    // 注意：DEAL_DAMAGE_TO_MONSTER 是法术 / 直伤路径，不存在 weapon-equip
+    // 衍生的 overkillDraw / overkillRecycleToHand / overkillAmplifyMissile /
+    // onAttackAmplifyMissileGenerate（那些只在武器攻击 PERFORM_HERO_ATTACK
+    // 路径下生效），这里只触发 log + lifesteal 两条。
+    {
+      const ae = computeAmuletEffectsForState(state);
+      const effectiveLifesteal = (state.permanentSpellLifesteal ?? 0) + (ae.lifeOverkillBonus ?? 0);
+      const overkill = computeOverkill(monster, effectiveDamage);
+      if (overkill > 0) {
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'combat', message: `超杀！${action.source} 对 ${monster.name} 造成 ${overkill} 点超额伤害` },
+        });
+        if (effectiveLifesteal > 0) {
+          enqueuedActions.push({ type: 'HEAL', amount: effectiveLifesteal, source: 'overkill-lifesteal' });
+        }
+      }
+    }
+
     if (isMonsterDefeated(updated)) {
       const { fromSlot: _fs, ...forGy } = updated as GameCardData & { fromSlot?: string };
       const graveyard = [...state.discardedCards as GameCardData[], forGy];
@@ -688,9 +712,19 @@ function reduceDealDamageToMonster(
         event: 'log:entry',
         payload: { type: 'combat', message: `「${monster.name}」已被毁坏。` },
       });
-      return applyPatch(state, { activeCards: activeCards as GameState['activeCards'], discardedCards: graveyard }, sideEffects);
+      return applyPatch(
+        state,
+        { activeCards: activeCards as GameState['activeCards'], discardedCards: graveyard },
+        sideEffects,
+        enqueuedActions.length > 0 ? enqueuedActions : undefined,
+      );
     }
-    return applyPatch(state, { activeCards: activeCards as GameState['activeCards'] }, sideEffects);
+    return applyPatch(
+      state,
+      { activeCards: activeCards as GameState['activeCards'] },
+      sideEffects,
+      enqueuedActions.length > 0 ? enqueuedActions : undefined,
+    );
   }
 
   // --- Max damage per hit log ---
@@ -2586,7 +2620,12 @@ function reducePerformHeroAttack(
 
     // Overkill — compute first, log unconditionally so the player can see it
     // happened even when they have no overkill-triggering equipment/amulet.
-    if (!isBuildingTarget) {
+    // Buildings (含幽灵建筑：增幅祭坛 / 命运之刃 / 诅咒碑 / 地雷；以及非幽灵
+    // 建筑：破印祭坛) 跟怪物一样按 hp 判超额伤害；computeOverkill 内部基于
+    // monster.hp 计算，对 building 直接生效。所有衍生效果（lifesteal /
+    // overkillDraw / overkillRecycleToHand / overkillAmplifyMissile /
+    // onAttackAmplifyMissileGenerate）通过 overkillHitCount 在下方统一触发。
+    {
       const ok = computeOverkill(workingMonster, finalDamage);
       if (ok > 0) {
         sideEffects.push({

@@ -981,7 +981,18 @@ function reduceResolveDice(
         // stack-pop mechanism can return it as a dungeon card on the goblin's
         // death. Amulet aura reversal is handled centrally by
         // `postProcessAmuletAura` in reducer.ts.
-        const stolenCard = flow.pickedItem;
+        //
+        // Strip `fromSlot` before stacking: `pickedItem` came from
+        // `state.equipmentSlot1/2` or `state.amuletSlots`, so it carries a
+        // slot-bound `fromSlot: 'equipmentSlot1' | 'equipmentSlot2' | 'amulet'`.
+        // When the stolen card later pops up into the active row (stack-pop
+        // on goblin death) and the player drags it to the backpack / hero row,
+        // `GameBoard.handleCardToSlot`'s `isCardFromEquipmentSlot(card)` guard
+        // sees the stale `fromSlot` and silently `return`s — making the card
+        // un-recoverable. See `card-fromslot-bookkeeping-on-move.mdc`.
+        const { fromSlot: _droppedFromSlot, ...rest } =
+          flow.pickedItem as GameCardData & { fromSlot?: unknown };
+        const stolenCard = rest as GameCardData;
         let nextEquip1 = newState.equipmentSlot1;
         let nextEquip2 = newState.equipmentSlot2;
         let nextAmulets = newState.amuletSlots;
