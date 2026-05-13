@@ -186,14 +186,15 @@ export function buildSharedDeck(seed?: number): {
     }
   }
 
-  // 5b. Pull all Wraiths into deck positions 9..16 (= indices [8, 16)).
+  // 5b. Pull all Wraiths into deck positions 1..12 (= indices [0, 12)).
   // Mirror of the Wraith-pull block in `rules/init.ts`. Keep both copies in
   // sync — if you change one, update the other. Wraith is the explicit
   // exception to step 5 (elites pushed back); see init.ts for the full
-  // rationale (chunks 3 & 4 of the deck so 幽魂净化 clearance loop has time
-  // to engage during the run).
-  const WRAITH_RESERVED_START = 8; // inclusive — deck position 9 (1-indexed)
-  const WRAITH_RESERVED_END = 16;  // exclusive — deck position 16 (1-indexed) = index 15
+  // rationale (chunks 1, 2 & 3 of the deck — the preview row plus the first
+  // two dungeon chunks — so 幽魂净化 clearance loop has maximum time to
+  // engage during the run; Wraith renders face-up in preview by design).
+  const WRAITH_RESERVED_START = 0;  // inclusive — deck position 1 (1-indexed) = index 0
+  const WRAITH_RESERVED_END = 12;   // exclusive — deck position 12 (1-indexed) = index 11
   for (let i = 0; i < arranged.length; i++) {
     if (i >= WRAITH_RESERVED_START && i < WRAITH_RESERVED_END) continue;
     const c = arranged[i];

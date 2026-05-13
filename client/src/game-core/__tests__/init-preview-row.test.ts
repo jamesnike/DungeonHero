@@ -109,11 +109,14 @@ describe('INIT_GAME preview row composition', () => {
   });
 
   it('first 16 cards contain no elite monsters (Wraith is the explicit exception)', () => {
-    // Elite Wraith is allowed in [0,16) — the Wraith-pull step in
+    // Elite Wraith is allowed in [0,12) — the Wraith-pull step in
     // `rules/init.ts` deliberately overrides the elite-push rule for Wraith
-    // so the player encounters Wraith early enough for the 幽魂净化 clearance
-    // loop to engage. All other elite monster types must still be pushed
-    // back.
+    // and pulls them into deck positions 1..12 so the player encounters
+    // Wraith as early as possible (even in the preview row) for the
+    // 幽魂净化 clearance loop to engage. All other elite monster types must
+    // still be pushed back to ≥16. The dedicated Wraith-landing test below
+    // asserts the stricter [0,12) bound; this test only verifies the
+    // "no non-Wraith elites in first 16" half of the invariant.
     const violations: Array<{ seed: number; pos: number; name: string }> = [];
     for (let seed = 1; seed <= 200; seed++) {
       const state = makeStateWithSeed(seed);
@@ -138,13 +141,16 @@ describe('INIT_GAME preview row composition', () => {
     expect(violations).toEqual([]);
   });
 
-  it('all Wraiths land in deck positions 9..16 of deckWithClassEvents (= indices [8, 16) = remainingDeck[4..12))', () => {
-    // `deckWithClassEvents[8..16)` in init.ts coordinates corresponds to the
-    // procedural-dungeon flat sequence remainingDeck[4..12) — the active row
-    // is the fixed Buglet+Events tutorial row and is NOT part of
-    // deckWithClassEvents, and the previewCards (chunk 0) sit at indices
-    // 0..3. Both non-elite and elite Wraiths must land in indices 8..15
-    // (inclusive) = positions 9..16 (1-indexed inclusive).
+  it('all Wraiths land in deck positions 1..12 of deckWithClassEvents (= indices [0, 12) = preview + remainingDeck[0..8))', () => {
+    // `deckWithClassEvents[0..12)` in init.ts coordinates spans the preview
+    // row (chunk 1 = previewCards = indices [0..4)) plus the first two
+    // dungeon chunks after preview (= remainingDeck[0..8) = indices [4..12)).
+    // The active row is the fixed Buglet+Events tutorial row and is NOT part
+    // of deckWithClassEvents. Both non-elite and elite Wraiths must land in
+    // indices 0..11 (inclusive) = positions 1..12 (1-indexed inclusive).
+    // Wraith renders face-up in the preview row by design, so appearance in
+    // chunk 1 is intentional (giving the 幽魂净化 clearance mechanic
+    // maximum time to engage).
     const violations: Array<{
       seed: number;
       pos: number;
@@ -170,7 +176,7 @@ describe('INIT_GAME preview row composition', () => {
         const c = deckWithClassEvents[i];
         if (c?.type === 'monster' && c.monsterType === 'Wraith') {
           foundWraithInRun = true;
-          if (i < 8 || i >= 16) {
+          if (i >= 12) {
             violations.push({
               seed,
               pos: i,
@@ -194,7 +200,7 @@ describe('INIT_GAME preview row composition', () => {
     // The multiplayer shared-deck builder uses an independent verbatim port
     // of the layout block, so we need a separate assertion to keep both
     // paths in sync. Same coordinate system: the full shared deck is the
-    // analogue of `deckWithClassEvents`, so all Wraiths must land in [8, 16).
+    // analogue of `deckWithClassEvents`, so all Wraiths must land in [0, 12).
     const violations: Array<{
       seed: number;
       pos: number;
@@ -209,7 +215,7 @@ describe('INIT_GAME preview row composition', () => {
         const c = deck[i];
         if (c?.type === 'monster' && c.monsterType === 'Wraith') {
           foundWraithInRun = true;
-          if (i < 8 || i >= 16) {
+          if (i >= 12) {
             violations.push({
               seed,
               pos: i,
