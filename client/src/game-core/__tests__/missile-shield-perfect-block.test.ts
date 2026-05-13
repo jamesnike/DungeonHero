@@ -3,8 +3,8 @@
  *
  * 钉死的不变量：
  *   1. knightDeck 里 弹幕护盾 持有 perfectBlockSpawnMissiles: 2，
- *      type='shield', value=2, durability=3, maxDurability=3, armorMax=2, classCard=true。
- *      不带 unique 标识（可重复获得）。
+ *      type='shield', value=4, durability=3, maxDurability=3, armorMax=4, classCard=true,
+ *      unique=true。
  *   2. 完美格挡（attack ≤ armor）+ 手牌空位 ≥ 2 → 手牌增加 2 张 name='魔弹' 的卡。
  *   3. 完美格挡 + 手牌空位 = 1 → 手牌只增加 1 张「魔弹」，log 提及"少入 1 张"。
  *   4. 完美格挡 + 手牌已满（空位 = 0）→ 手牌不变，log 提及"手牌已满"。
@@ -50,10 +50,10 @@ function makeBarrageShield(over: Partial<GameCardData> = {}): EquipmentItem {
     id: 'shield-barrage',
     type: 'shield',
     name: '弹幕护盾',
-    value: 2,
+    value: 4,
     image: '',
-    armor: 2,
-    armorMax: 2,
+    armor: 4,
+    armorMax: 4,
     durability: 3,
     maxDurability: 3,
     perfectBlockSpawnMissiles: 2,
@@ -112,13 +112,13 @@ describe('弹幕护盾 — knightDeck wiring', () => {
     const card = deck.find(c => c.name === '弹幕护盾');
     expect(card).toBeTruthy();
     expect(card?.type).toBe('shield');
-    expect(card?.value).toBe(2);
-    expect(card?.armorMax).toBe(2);
+    expect(card?.value).toBe(4);
+    expect(card?.armorMax).toBe(4);
     expect(card?.durability).toBe(3);
     expect(card?.maxDurability).toBe(3);
     expect((card as any)?.perfectBlockSpawnMissiles).toBe(2);
     expect(card?.classCard).toBe(true);
-    expect((card as any)?.unique).toBeUndefined();
+    expect((card as any)?.unique).toBe(true);
     expect(card?.shortDescription).toContain('魔弹');
   });
 });
@@ -145,7 +145,7 @@ describe('弹幕护盾 — perfect block with hand room', () => {
   });
 
   it('attack == armor (boundary): still triggers 2 「魔弹」', () => {
-    const monster = makeMonster({ id: 'goblin', attack: 2 });
+    const monster = makeMonster({ id: 'goblin', attack: 4 });
     const shield = makeBarrageShield();
     const state = setupBlockState(monster, shield);
 
@@ -257,12 +257,12 @@ describe('弹幕护盾 — spawned 魔弹 inherits amplifiedCardBonus', () => {
 // ---------------------------------------------------------------------------
 
 describe('弹幕护盾 — upgraded missile count scales perfectBlockSpawnMissiles', () => {
-  it('L1 shield (armor 4, missiles 2): perfect block spawns 2 「魔弹」', () => {
+  it('L1 shield (armor 6, missiles 2): perfect block spawns 2 「魔弹」', () => {
     const monster = makeMonster({ id: 'goblin', attack: 4 });
     const shield = makeBarrageShield({
-      armor: 4,
-      armorMax: 4,
-      value: 4,
+      armor: 6,
+      armorMax: 6,
+      value: 6,
       perfectBlockSpawnMissiles: 2,
     } as any);
     const state = setupBlockState(monster, shield);
@@ -273,12 +273,12 @@ describe('弹幕护盾 — upgraded missile count scales perfectBlockSpawnMissil
     expect(bolts).toHaveLength(2);
   });
 
-  it('L2 shield (armor 4, missiles 3): perfect block spawns 3 「魔弹」', () => {
+  it('L2 shield (armor 6, missiles 3): perfect block spawns 3 「魔弹」', () => {
     const monster = makeMonster({ id: 'goblin', attack: 4 });
     const shield = makeBarrageShield({
-      armor: 4,
-      armorMax: 4,
-      value: 4,
+      armor: 6,
+      armorMax: 6,
+      value: 6,
       perfectBlockSpawnMissiles: 3,
     } as any);
     const state = setupBlockState(monster, shield);
@@ -295,9 +295,9 @@ describe('弹幕护盾 — upgraded missile count scales perfectBlockSpawnMissil
   it('L2 shield with hand room = 2: only 2 「魔弹」 added (silent overflow drop), log mentions 少入 1 张', () => {
     const monster = makeMonster({ id: 'goblin', attack: 4 });
     const shield = makeBarrageShield({
-      armor: 4,
-      armorMax: 4,
-      value: 4,
+      armor: 6,
+      armorMax: 6,
+      value: 6,
       perfectBlockSpawnMissiles: 3,
     } as any);
     const handLimit = HAND_LIMIT;

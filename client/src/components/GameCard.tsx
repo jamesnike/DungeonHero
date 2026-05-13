@@ -1687,9 +1687,16 @@ const amuletEffectText =
                   {isMagicLikeCard && (
                     <div className="dh-card__event-option relative z-10 w-full text-left leading-snug text-zinc-900">
                       {card.scalingDamage != null ? (
-                        <span className="block font-semibold text-cyan-950 dark:text-cyan-100">
-                          {formatScalingSpellDamageLine(card.scalingDamage)}
-                        </span>
+                        <>
+                          <span className="block font-semibold text-cyan-950 dark:text-cyan-100">
+                            {formatScalingSpellDamageLine(card.scalingDamage)}
+                          </span>
+                          {(card.shortDescription || card.description) && (
+                            <span className="block text-zinc-700 dark:text-zinc-300">
+                              {card.shortDescription || card.description}
+                            </span>
+                          )}
+                        </>
                       ) : card.magicEffect === 'arcane-storm-magic-count' ? (
                         <span className="block font-semibold text-cyan-950 dark:text-cyan-100">
                           当下 {arcaneStormDamage + (card.amplifyBonus ?? 0)} 点

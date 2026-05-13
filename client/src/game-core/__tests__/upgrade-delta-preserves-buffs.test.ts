@@ -117,14 +117,14 @@ describe('upgrade: potion-buffed maxDurability preserved on top of delta', () =>
 // ---------------------------------------------------------------------------
 
 describe('upgrade: combat-damaged armor preserved with delta added on top', () => {
-  it('barrageShield armor 1/2 (1 hit taken) → L1 (delta +2) gives armor 3/4', () => {
+  it('barrageShield armor 3/4 (1 hit taken) → L1 (delta +2) gives armor 5/6', () => {
     const damagedShield: GameCardData = {
       id: 'knight-barrage',
       type: 'shield',
       name: '弹幕护盾',
-      value: 2,
-      armorMax: 2,
-      armor: 1,
+      value: 4,
+      armorMax: 4,
+      armor: 3,
       durability: 3,
       maxDurability: 3,
       perfectBlockSpawnMissiles: 2,
@@ -135,9 +135,9 @@ describe('upgrade: combat-damaged armor preserved with delta added on top', () =
 
     const upgraded = applyUpgrade(damagedShield, 1);
 
-    expect(upgraded.value).toBe(4);
-    expect((upgraded as any).armorMax).toBe(4);
-    expect((upgraded as any).armor).toBe(3);
+    expect(upgraded.value).toBe(6);
+    expect((upgraded as any).armorMax).toBe(6);
+    expect((upgraded as any).armor).toBe(5);
   });
 });
 

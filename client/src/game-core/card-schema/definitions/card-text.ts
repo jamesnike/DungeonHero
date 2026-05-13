@@ -848,10 +848,10 @@ const scholarShield: CardTextFormatter = (card) => {
 };
 
 // Handler still sets `drawOnAttack` (and applyMaxDurabilityDelta on durability).
-// L0/L1 抽 1，L2 抽 2；耐久 L0:3 → L1:4 → L2:4 由 handler 处理，描述里不重复打数字。
+// L0/L1 抽 2，L2 抽 3；耐久 L0:3 → L1:4 → L2:4 由 handler 处理，描述里不重复打数字。
 const scholarBlade: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
-  const drawCounts = [1, 1, 2];
+  const drawCounts = [2, 2, 3];
   const draw = pick(drawCounts, level);
   return {
     description: `每次攻击：从背包抽 ${draw} 张牌。`,

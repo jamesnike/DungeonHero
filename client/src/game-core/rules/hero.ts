@@ -2300,25 +2300,20 @@ function reduceMagicMonsterSelection(
       const echo = (pending as any).echoMultiplier ?? 1;
       const totalDamage = computeSpellDamagePure(state, strikeBase) * echo;
       const nextBase = pending.card.scalingDamage ?? strikeBase + 1;
+      sideEffects.push({ event: 'hero:cardRemoved', payload: { cardId: pending.card.id, animate: false } });
       if (isHeroTarget) {
         if (totalDamage > 0) {
           applySelfDamage(totalDamage, 'scaling-damage');
         }
-        enqueuedActions.push({ type: 'ADD_PERMANENT_MAGIC_TO_RECYCLE', card: pending.card });
-        patch.pendingMagicAction = null;
         sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对${targetName}造成 ${totalDamage} 点（下一击叠刺 ${nextBase}）` } });
-        sideEffects.push({ event: 'hero:cardRemoved', payload: { cardId: pending.card.id, animate: false } });
-        patch.heroSkillBanner = `${pending.card.name} 下一击叠刺 ${nextBase}`;
-        return applyPatch(state, patch, sideEffects, enqueuedActions);
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `${pending.card.name} 下一击叠刺 ${nextBase}`, { dealtDamage: true });
       }
       ensureEngaged(state, monster!, enqueuedActions);
       enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'scaling-damage', isSpellDamage: true });
-      enqueuedActions.push({ type: 'ADD_PERMANENT_MAGIC_TO_RECYCLE', card: pending.card });
-      patch.pendingMagicAction = null;
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对 ${monster!.name} 造成 ${totalDamage} 点（下一击叠刺 ${nextBase}）` } });
-      sideEffects.push({ event: 'hero:cardRemoved', payload: { cardId: pending.card.id, animate: false } });
-      patch.heroSkillBanner = `${pending.card.name} 下一击叠刺 ${nextBase}`;
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${pending.card.name} 下一击叠刺 ${nextBase}`, { dealtDamage: true });
     }
 
     case 'arcane-storm': {

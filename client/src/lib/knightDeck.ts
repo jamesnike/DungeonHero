@@ -757,11 +757,11 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
   // 走 createMagicBoltCard + applyAmplifyOnCreate（与魔弹连弩 / 魔法飞弹 / 弹幕之符 一致），
   // 让新生成的「魔弹」继承当前 amplifiedCardBonus['魔弹'] 累计加成。
   // 实现位置：rules/combat.ts 完美格挡判定块（dual-guard 之后、blockGrantTempArmorToOther 之前）。
-  // 升级：L1 护甲 2→4（耐久不变，效果不变）；L2 perfectBlockSpawnMissiles 2→3（护甲/耐久不变）。
+  // 升级：L1 护甲 4→6（耐久不变，效果不变）；L2 perfectBlockSpawnMissiles 2→3（护甲/耐久不变）。
   pushCard({
     type: 'shield',
     name: '弹幕护盾',
-    value: 2,
+    value: 4,
     image: knightBarrageShieldImage,
     classCard: true,
     unique: true,
@@ -770,7 +770,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     perfectBlockSpawnMissiles: 2,
     durability: 3,
     maxDurability: 3,
-    armorMax: 2,
+    armorMax: 4,
     knightEffect: 'barrage-shield',
     maxUpgradeLevel: 2,
   });
@@ -1770,7 +1770,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     magicEffect: '+1(递增) 临时护甲，侧击赋予复生。',
     knightEffect: 'flank-fortify',
     flankEffect: '赋予该装备复生',
-    recycleDelay: 2,
+    recycleDelay: 1,
   });
 
   pushCard({
@@ -2165,12 +2165,12 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 2,
   });
 
-  // 智者之刃 — 4 攻 / 3 耐久。每次攻击从背包抽 1 张牌（drawOnAttack: 1）。
+  // 智者之刃 — 4 攻 / 3 耐久。每次攻击从背包抽 2 张牌（drawOnAttack: 2）。
   // 由 combat.ts:reducePerformHeroAttack 的 drawOnAttack 触发分支消费，与 healOnAttack
   // 同语义：fork 攻击（每次 PERFORM_HERO_ATTACK 都触发）+ 装备超频（overclockExtra 复用）。
   // 走标准 DRAW_CARDS source: 'backpack'（draw-cards-defaults-to-backpack 规则），
   // 自动尊重背包置顶优先级。
-  // 升级：L1 4攻 / 4 耐久（drawOnAttack 不变）；L2 4攻 / 4 耐久 / drawOnAttack 1 → 2。
+  // 升级：L1 4攻 / 4 耐久（drawOnAttack 不变）；L2 4攻 / 4 耐久 / drawOnAttack 2 → 3。
   // 图片复用 圣光之刃 的 holy_light_blade.png（光明长刃同主题，零新图片包袱）。
   pushCard({
     type: 'weapon',
@@ -2178,9 +2178,9 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 4,
     image: knightScholarBladeImage,
     classCard: true,
-    description: '每次攻击：从背包抽 1 张牌。',
-    shortDescription: '每次攻击抽 1 张',
-    drawOnAttack: 1,
+    description: '每次攻击：从背包抽 2 张牌。',
+    shortDescription: '每次攻击抽 2 张',
+    drawOnAttack: 2,
     durability: 3,
     maxDurability: 3,
     knightEffect: 'scholar-blade',

@@ -15,9 +15,9 @@
  *     pipeline.ts:368 已白名单，攻击链 drain 不会卡。
  *
  * 升级（mirror 智者圣盾的 L0/L1/L2 表，但 maxDur 走 delta 保留 mid-game amp）：
- *   - L0: 4 攻 / 3 耐久，每次攻击抽 1 张
+ *   - L0: 4 攻 / 3 耐久，每次攻击抽 2 张
  *   - L1: 4 攻 / 4 耐久（+1 maxDur 走 applyMaxDurabilityDelta 保留破损）
- *   - L2: 4 攻 / 4 耐久，每次攻击抽 2 张
+ *   - L2: 4 攻 / 4 耐久，每次攻击抽 3 张
  */
 
 import { describe, expect, it } from 'vitest';
@@ -54,7 +54,7 @@ function makeWeapon(over?: Partial<GameCardData>): GameCardData {
     image: '',
     durability: 3,
     maxDurability: 3,
-    drawOnAttack: 1,
+    drawOnAttack: 2,
     knightEffect: 'scholar-blade',
     classCard: true,
     maxUpgradeLevel: 2,
@@ -107,7 +107,7 @@ function applyUpgrade(card: GameCardData, newLevel: number): GameCardData {
 // ---------------------------------------------------------------------------
 
 describe('knight class deck: 智者之刃 entry', () => {
-  it('appears in generateKnightDeck with 4 attack / 3 durability / drawOnAttack: 1', () => {
+  it('appears in generateKnightDeck with 4 attack / 3 durability / drawOnAttack: 2', () => {
     const [deck] = generateKnightDeck(createRng(11));
     const card = deck.find(c => c.name === '智者之刃');
     expect(card).toBeTruthy();
@@ -115,7 +115,7 @@ describe('knight class deck: 智者之刃 entry', () => {
     expect(card?.value).toBe(4);
     expect(card?.durability).toBe(3);
     expect(card?.maxDurability).toBe(3);
-    expect((card as any)?.drawOnAttack).toBe(1);
+    expect((card as any)?.drawOnAttack).toBe(2);
     expect((card as any)?.knightEffect).toBe('scholar-blade');
     expect(card?.classCard).toBe(true);
     expect((card as any)?.maxUpgradeLevel).toBe(2);
@@ -130,7 +130,7 @@ describe('knight class deck: 智者之刃 entry', () => {
 // ---------------------------------------------------------------------------
 
 describe('智者之刃 攻击触发 — PERFORM_HERO_ATTACK 路径', () => {
-  it('攻击一次：从背包抽 1 张牌进手牌（耐久 -1）', () => {
+  it('攻击一次：从背包抽 2 张牌进手牌（耐久 -1）', () => {
     const weapon = makeWeapon();
     const monster = makeMonster();
     const bp1 = makeBackpackCard('bp-1');
@@ -153,12 +153,12 @@ describe('智者之刃 攻击触发 — PERFORM_HERO_ATTACK 路径', () => {
       { type: 'PERFORM_HERO_ATTACK', slotId: 'equipmentSlot1', targetMonsterId: monster.id } as GameAction,
     ]);
 
-    expect(r.state.handCards.length).toBe(1);
-    expect(r.state.backpackItems.length).toBe(1);
+    expect(r.state.handCards.length).toBe(2);
+    expect(r.state.backpackItems.length).toBe(0);
 
     const log = r.sideEffects.find(e =>
       e.event === 'log:entry'
-      && (e.payload as any)?.message?.includes('智者之刃 攻击：从背包抽 1 张牌'),
+      && (e.payload as any)?.message?.includes('智者之刃 攻击：从背包抽 2 张牌'),
     );
     expect(log).toBeTruthy();
   });
@@ -189,7 +189,7 @@ describe('智者之刃 攻击触发 — PERFORM_HERO_ATTACK 路径', () => {
     const drawActions = (r.enqueuedActions ?? []).filter(a => a.type === 'DRAW_CARDS');
     expect(drawActions.length).toBe(1);
     expect((drawActions[0] as any).source).toBe('backpack');
-    expect((drawActions[0] as any).count).toBe(1);
+    expect((drawActions[0] as any).count).toBe(2);
   });
 
   it('背包为空时仍能正常攻击（DRAW_CARDS 在背包空时 noop，攻击链不卡）', () => {
@@ -222,9 +222,9 @@ describe('智者之刃 攻击触发 — PERFORM_HERO_ATTACK 路径', () => {
 // ---------------------------------------------------------------------------
 // 3) Upgrade L0 → L1 → L2
 //
-// L0: 4 攻 / 3 耐 / drawOnAttack 1
-// L1: 4 攻 / 4 耐（+1 maxDur） / drawOnAttack 1（不变）
-// L2: 4 攻 / 4 耐（不变） / drawOnAttack 2
+// L0: 4 攻 / 3 耐 / drawOnAttack 2
+// L1: 4 攻 / 4 耐（+1 maxDur） / drawOnAttack 2（不变）
+// L2: 4 攻 / 4 耐（不变） / drawOnAttack 3
 // ---------------------------------------------------------------------------
 
 describe('智者之刃 升级 L0 → L1 → L2', () => {
@@ -235,23 +235,23 @@ describe('智者之刃 升级 L0 → L1 → L2', () => {
     expect(upgraded.maxDurability).toBe(4);
     expect(upgraded.durability).toBe(4);
     expect(upgraded.value).toBe(4);
-    expect((upgraded as any).drawOnAttack).toBe(1);
+    expect((upgraded as any).drawOnAttack).toBe(2);
     expect((upgraded as any).knightEffect).toBe('scholar-blade');
-    expect(upgraded.description).toBe('每次攻击：从背包抽 1 张牌。');
-    expect(upgraded.shortDescription).toBe('每次攻击抽 1 张');
+    expect(upgraded.description).toBe('每次攻击：从背包抽 2 张牌。');
+    expect(upgraded.shortDescription).toBe('每次攻击抽 2 张');
   });
 
-  it('L1 → L2: drawOnAttack 1 → 2，maxDurability/durability 不变', () => {
+  it('L1 → L2: drawOnAttack 2 → 3，maxDurability/durability 不变', () => {
     const l1 = applyUpgrade(makeWeapon(), 1);
     const l2 = applyUpgrade(l1, 2);
     expect(l2.upgradeLevel).toBe(2);
     expect(l2.maxDurability).toBe(4);
     expect(l2.durability).toBe(4);
     expect(l2.value).toBe(4);
-    expect((l2 as any).drawOnAttack).toBe(2);
+    expect((l2 as any).drawOnAttack).toBe(3);
     expect((l2 as any).knightEffect).toBe('scholar-blade');
-    expect(l2.description).toBe('每次攻击：从背包抽 2 张牌。');
-    expect(l2.shortDescription).toBe('每次攻击抽 2 张');
+    expect(l2.description).toBe('每次攻击：从背包抽 3 张牌。');
+    expect(l2.shortDescription).toBe('每次攻击抽 3 张');
   });
 
   it('L0 → L1 保留 mid-game maxDur 增幅（applyMaxDurabilityDelta preserve+delta）', () => {
@@ -262,16 +262,16 @@ describe('智者之刃 升级 L0 → L1 → L2', () => {
     const l1 = applyUpgrade(amped, 1);
     expect(l1.maxDurability).toBe(4);
     expect(l1.durability).toBe(4);
-    expect((l1 as any).drawOnAttack).toBe(1);
+    expect((l1 as any).drawOnAttack).toBe(2);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 4) L2 attack — 端到端确认抽 2 张
+// 4) L2 attack — 端到端确认抽 3 张
 // ---------------------------------------------------------------------------
 
 describe('智者之刃 L2 攻击 — PERFORM_HERO_ATTACK 路径', () => {
-  it('L2 攻击一次：从背包抽 2 张牌进手牌', () => {
+  it('L2 攻击一次：从背包抽 3 张牌进手牌', () => {
     const l2 = applyUpgrade(applyUpgrade(makeWeapon(), 1), 2);
     const monster = makeMonster();
     const bp1 = makeBackpackCard('bp-1');
@@ -295,12 +295,12 @@ describe('智者之刃 L2 攻击 — PERFORM_HERO_ATTACK 路径', () => {
       { type: 'PERFORM_HERO_ATTACK', slotId: 'equipmentSlot1', targetMonsterId: monster.id } as GameAction,
     ]);
 
-    expect(r.state.handCards.length).toBe(2);
-    expect(r.state.backpackItems.length).toBe(1);
+    expect(r.state.handCards.length).toBe(3);
+    expect(r.state.backpackItems.length).toBe(0);
 
     const log = r.sideEffects.find(e =>
       e.event === 'log:entry'
-      && (e.payload as any)?.message?.includes('智者之刃 攻击：从背包抽 2 张牌'),
+      && (e.payload as any)?.message?.includes('智者之刃 攻击：从背包抽 3 张牌'),
     );
     expect(log).toBeTruthy();
   });

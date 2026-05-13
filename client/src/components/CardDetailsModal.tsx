@@ -1345,9 +1345,16 @@ export default function CardDetailsModal({
                 )}
                 <div>
                   {card.scalingDamage != null ? (
-                    <p className="font-semibold text-foreground">
-                      {formatScalingSpellDamageLine(card.scalingDamage)}
-                    </p>
+                    <>
+                      <p className="font-semibold text-foreground">
+                        {formatScalingSpellDamageLine(card.scalingDamage)}
+                      </p>
+                      {(card.shortDescription || card.description) && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {card.shortDescription || card.description}
+                        </p>
+                      )}
+                    </>
                   ) : card.magicEffect === 'arcane-storm-magic-count' ? (
                     <>
                       <p className="font-semibold text-foreground">

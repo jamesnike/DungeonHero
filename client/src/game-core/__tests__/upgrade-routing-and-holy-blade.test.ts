@@ -1769,7 +1769,7 @@ describe('Barrage Shield (弹幕护盾) upgrade handler', () => {
       id: 'knight-barrage-shield-1',
       type: 'shield',
       name: '弹幕护盾',
-      value: 2,
+      value: 4,
       image: '',
       classCard: true,
       description: '完美格挡时，将 2 张「魔弹」加入手牌（手牌已满则静默丢弃多余的）。',
@@ -1777,7 +1777,7 @@ describe('Barrage Shield (弹幕护盾) upgrade handler', () => {
       perfectBlockSpawnMissiles: 2,
       durability: 3,
       maxDurability: 3,
-      armorMax: 2,
+      armorMax: 4,
       knightEffect: 'barrage-shield',
       maxUpgradeLevel: 2,
       upgradeLevel: 0,
@@ -1789,16 +1789,16 @@ describe('Barrage Shield (弹幕护盾) upgrade handler', () => {
     expect(resolveUpgradeEffectId(barrageShieldL0())).toBe('knight:barrage-shield');
   });
 
-  it('L0 → L1: armor 2 → 4, missile count stays 2, durability stays 3/3, current armor preserve+delta', () => {
-    // armor field 走 preserve+delta：fresh shield armor=2 + delta +2 = 4（clamp 到新 cap 4）。
-    const card = barrageShieldL0({ armor: 2 } as any);
+  it('L0 → L1: armor 4 → 6, missile count stays 2, durability stays 3/3, current armor preserve+delta', () => {
+    // armor field 走 preserve+delta：fresh shield armor=4 + delta +2 = 6（clamp 到新 cap 6）。
+    const card = barrageShieldL0({ armor: 4 } as any);
     const state = makeState({ handCards: [card] });
     const result = reduce(state, { type: 'UPGRADE_CARD', cardId: card.id });
     const upgraded = result.state.handCards[0] as any;
     expect(upgraded.upgradeLevel).toBe(1);
-    expect(upgraded.value).toBe(4);
-    expect(upgraded.armorMax).toBe(4);
-    expect(upgraded.armor).toBe(4);
+    expect(upgraded.value).toBe(6);
+    expect(upgraded.armorMax).toBe(6);
+    expect(upgraded.armor).toBe(6);
     expect(upgraded.durability).toBe(3);
     expect(upgraded.maxDurability).toBe(3);
     expect(upgraded.perfectBlockSpawnMissiles).toBe(2);
@@ -1806,18 +1806,18 @@ describe('Barrage Shield (弹幕护盾) upgrade handler', () => {
     expect(upgraded.shortDescription).toContain('2 张「魔弹」');
   });
 
-  it('L1 → L2: missile count 2 → 3, armor stays 4, durability stays 3/3', () => {
+  it('L1 → L2: missile count 2 → 3, armor stays 6, durability stays 3/3', () => {
     const card = barrageShieldL0({
       upgradeLevel: 1,
-      value: 4,
-      armorMax: 4,
+      value: 6,
+      armorMax: 6,
     } as any);
     const state = makeState({ handCards: [card] });
     const result = reduce(state, { type: 'UPGRADE_CARD', cardId: card.id });
     const upgraded = result.state.handCards[0] as any;
     expect(upgraded.upgradeLevel).toBe(2);
-    expect(upgraded.value).toBe(4);
-    expect(upgraded.armorMax).toBe(4);
+    expect(upgraded.value).toBe(6);
+    expect(upgraded.armorMax).toBe(6);
     expect(upgraded.durability).toBe(3);
     expect(upgraded.maxDurability).toBe(3);
     expect(upgraded.perfectBlockSpawnMissiles).toBe(3);
@@ -1825,15 +1825,15 @@ describe('Barrage Shield (弹幕护盾) upgrade handler', () => {
     expect(upgraded.shortDescription).toContain('3 张「魔弹」');
   });
 
-  it('L0 → L1 → L2 chained: end state has armor 4, missile count 3, durability 3/3', () => {
+  it('L0 → L1 → L2 chained: end state has armor 6, missile count 3, durability 3/3', () => {
     const card = barrageShieldL0();
     let state = makeState({ handCards: [card] });
     state = reduce(state, { type: 'UPGRADE_CARD', cardId: card.id }).state;
     state = reduce(state, { type: 'UPGRADE_CARD', cardId: card.id }).state;
     const upgraded = state.handCards[0] as any;
     expect(upgraded.upgradeLevel).toBe(2);
-    expect(upgraded.value).toBe(4);
-    expect(upgraded.armorMax).toBe(4);
+    expect(upgraded.value).toBe(6);
+    expect(upgraded.armorMax).toBe(6);
     expect(upgraded.durability).toBe(3);
     expect(upgraded.maxDurability).toBe(3);
     expect(upgraded.perfectBlockSpawnMissiles).toBe(3);
@@ -1842,15 +1842,15 @@ describe('Barrage Shield (弹幕护盾) upgrade handler', () => {
   it('cannot upgrade past maxUpgradeLevel (2)', () => {
     const card = barrageShieldL0({
       upgradeLevel: 2,
-      value: 4,
-      armorMax: 4,
+      value: 6,
+      armorMax: 6,
       perfectBlockSpawnMissiles: 3,
     } as any);
     const state = makeState({ handCards: [card] });
     const result = reduce(state, { type: 'UPGRADE_CARD', cardId: card.id });
     const upgraded = result.state.handCards[0] as any;
     expect(upgraded.upgradeLevel).toBe(2);
-    expect(upgraded.value).toBe(4);
+    expect(upgraded.value).toBe(6);
     expect(upgraded.perfectBlockSpawnMissiles).toBe(3);
   });
 });

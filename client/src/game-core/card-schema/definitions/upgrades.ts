@@ -400,14 +400,14 @@ const communalDefenseShield: OnUpgradeHandler = (upgraded, newLevel) => {
 };
 
 // 弹幕护盾 (knight:barrage-shield)：
-//   L0 -> L1: value/armorMax design table [2, 4]，delta +2（preserve+delta：
+//   L0 -> L1: value/armorMax design table [4, 6]，delta +2（preserve+delta：
 //             current value + 2，amp 保留；当前 armor 同 +2 clamp 到新 cap）。
 //             durability 3/3 不变。perfectBlockSpawnMissiles 不变（2）。
-//   L1 -> L2: value/armorMax 不变。durability 3/3 不变。
+//   L1 -> L2: value/armorMax 不变（6）。durability 3/3 不变。
 //             perfectBlockSpawnMissiles 2 → 3（完美格挡生成 3 张魔弹）。
 //   description / shortDescription 动态更新魔弹张数。
 const barrageShield: OnUpgradeHandler = (upgraded, newLevel) => {
-  const armors = [2, 4, 4];
+  const armors = [4, 6, 6];
   const missileCounts = [2, 2, 3];
 
   applyShieldArmorDelta(upgraded, armors, newLevel);
@@ -507,14 +507,14 @@ const scholarShield: OnUpgradeHandler = (upgraded, newLevel) => {
 
 // 智者之刃 (knight:scholar-blade)：
 //   L0 -> L1: maxDurability/durability 3/3 → 4/4（applyMaxDurabilityDelta 走 preserve+delta，
-//             保留 mid-game amp / 战斗中残存的破损量）。value (4 攻) / drawOnAttack (1) 不变。
+//             保留 mid-game amp / 战斗中残存的破损量）。value (4 攻) / drawOnAttack (2) 不变。
 //   L1 -> L2: maxDurability/durability 不变（4/4，table delta = 0）。
-//             drawOnAttack 1 → 2（每次攻击从背包抽 2 张牌）。
+//             drawOnAttack 2 → 3（每次攻击从背包抽 3 张牌）。
 // drawOnAttack 由 combat.ts:reducePerformHeroAttack 的 drawOnAttack 触发分支消费
 // （mirror healOnAttack 的 fork + overclock 语义）；走标准 DRAW_CARDS source: 'backpack'。
 const scholarBlade: OnUpgradeHandler = (upgraded, newLevel) => {
   const maxDurs = [3, 4, 4];
-  const drawCounts = [1, 1, 2];
+  const drawCounts = [2, 2, 3];
   applyMaxDurabilityDelta(upgraded, maxDurs, newLevel);
   (upgraded as any).drawOnAttack = drawCounts[newLevel] ?? drawCounts[drawCounts.length - 1];
 };

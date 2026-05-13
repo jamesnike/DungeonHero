@@ -478,7 +478,7 @@ export function getFlipToCardDefinition(token: string, rng: RngState): FlipCardD
   const defs: Record<string, () => FlipCardDef> = {
     flipToArcaneShield: () => {
       [id, rng] = nextId(rng, 'arcane-shield');
-      return { card: { id, type: 'magic', name: '奥术护盾', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'arcane-shield-stun-cap', description: '永久魔法（Perm 2）：击晕上限 +X%，X = 本回合已使用的非伤害魔法卡数量。', shortDescription: '击晕上限 +X%（X ＝ 本回合非伤害魔法数）', recycleDelay: 2 }, rng, banner: '奥术回廊翻转为奥术护盾，已放入背包。', logMessage: '事件效果：奥术回廊翻转成了「奥术护盾」', transformMessage: '奥术回廊翻转为「奥术护盾」…' };
+      return { card: { id, type: 'magic', name: '奥术护盾', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'arcane-shield-stun-cap', description: '永久魔法（Perm 1）：击晕上限 +X%，X = 本回合已使用的非伤害魔法卡数量。', shortDescription: '击晕上限 +X%（X ＝ 本回合非伤害魔法数）', recycleDelay: 1 }, rng, banner: '奥术回廊翻转为奥术护盾，已放入背包。', logMessage: '事件效果：奥术回廊翻转成了「奥术护盾」', transformMessage: '奥术回廊翻转为「奥术护盾」…' };
     },
     guildFlipToMagic: () => {
       // 不要在这里设 `magicEffect: '永久魔法：…'`（描述字符串）。`resolveEffectId`
