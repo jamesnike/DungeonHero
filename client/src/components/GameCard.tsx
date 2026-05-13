@@ -2041,10 +2041,40 @@ const amuletEffectText =
                       <div className="relative group flex items-center">
                         <div className="flex items-baseline gap-0 dh-card__icon-gap">
                           {(() => {
-                            // Single-counter armor model for monster equipment: render
-                            // one number Z = max(0, baseHp + lowGoldBuff + slotBonus).
+                            // Single-counter armor model. Two paths:
+                            //   1. Equipped monster (isMonsterEquipmentCard): mirrors
+                            //      shield rendering — show clamp(card.armor, cap)
+                            //      where cap = max(0, baseHp + perm + temp). When
+                            //      armor is undefined ("fresh / at full cap"), use
+                            //      cap directly. This matches getSlotCurrentArmor
+                            //      and the in-slot combat reads — so the displayed
+                            //      number reflects the live armor remaining within
+                            //      the current durability layer.
+                            //   2. Row monster (not equipped): show baseHp +
+                            //      modifiers as before — card.hp is already the
+                            //      live HP for row monsters and lowGoldBuff is
+                            //      reflected via monsterHpModifier.
                             // `equipmentShieldModifierNum` aggregates perm + temp +
                             // defense (see useCardOperations.ts).
+                            if (isMonsterEquipmentCard(card)) {
+                              const baseHp = card.hp ?? card.value ?? 0;
+                              const cap = Math.max(0, baseHp + equipmentShieldModifierNum);
+                              const currentArmor = card.armor === undefined
+                                ? cap
+                                : Math.max(0, Math.min(card.armor, cap));
+                              const isDamaged = currentArmor < cap;
+                              const isBoosted = equipmentShieldModifierNum > 0;
+                              const colorClass = isDamaged
+                                ? 'text-orange-500'
+                                : isBoosted
+                                  ? 'text-emerald-600'
+                                  : 'text-black';
+                              return (
+                                <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${colorClass}`}>
+                                  {currentArmor}
+                                </span>
+                              );
+                            }
                             const totalHp = Math.max(
                               0,
                               monsterHpBase + monsterHpModifier + equipmentShieldModifierNum,
