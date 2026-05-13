@@ -268,8 +268,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: thunderAmuletSigilImage,
     classCard: true,
-    description: '每弃置一张牌到坟场，对激活行随机怪物造成 3 点伤害。',
-    shortDescription: '每弃置 1 张，对随机怪物造成 3 伤',
+    description: '每弃置或删除 1 张牌，对激活行随机怪物造成 3 点伤害。',
+    shortDescription: '每弃置/删除 1 张，对随机怪物造成 3 伤',
     amuletEffect: 'discard-zap',
   });
 

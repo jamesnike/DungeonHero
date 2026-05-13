@@ -1108,9 +1108,19 @@ function reduceConfirmDeleteCard(
     });
   }
 
-  // 「招灵书印」(delete-draw): every "删除" (move-out-of-game) — shop or event —
-  // fires the buff/gold proc per equipped copy. Only fires for kw === 'delete';
-  // discard / recycle / move-to do not count as 删除.
+  // 「招灵书印」(delete-draw) + 「雷霆符印」(discard-zap): every "删除"
+  // (move-out-of-game) — shop or event — fires both amulets per equipped copy.
+  // Only fires for kw === 'delete'; discard / recycle / move-to do not count
+  // as 删除 (the discard / recycle paths already enqueue APPLY_DISCARD_EFFECTS
+  // above which handles those amulets via their normal 弃置 path).
+  //
+  // 雷霆符印 is the explicit "delete also triggers" exception card per its
+  // text "每弃置/删除 1 张牌". Self-exclude rule mirrors `reduceApplyDiscardEffects`:
+  // deleting a discard-zap amulet itself does NOT fire any zaps.
+  // CONFIRM_DELETE_CARD's kw='delete' targets only player-chosen cards in
+  // shop/event modals (hand/backpack/class deck) — never the equipped amulets
+  // themselves — so source === 'amulet' is technically unreachable here, but
+  // the self-exclude check is kept for defensive consistency with cards.ts.
   if (kw === 'delete') {
     const ae = computeAmuletEffectsForState(state);
     maybeTriggerDeleteDrawForDelete({
@@ -1119,6 +1129,15 @@ function reduceConfirmDeleteCard(
       sideEffects,
       enqueuedActions,
     });
+    if (
+      cardToDelete.amuletEffect !== 'discard-zap' &&
+      ae.discardShockCount > 0
+    ) {
+      sideEffects.push({
+        event: 'card:discardShock',
+        payload: { count: ae.discardShockCount },
+      });
+    }
   }
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);

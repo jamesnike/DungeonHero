@@ -1453,6 +1453,26 @@ function reduceDeleteCard(
     enqueuedActions,
   });
 
+  // 「雷霆符印」(discard-zap): the card text reads "每弃置/删除 1 张牌" —
+  // delete is an explicit exception to the GAME_MECHANICS §1 "delete doesn't
+  // trigger side-effect amulets" rule, alongside 招灵书印 above.
+  // Self-exclude rule mirrors `reduceApplyDiscardEffects`: deleting a
+  // discard-zap amulet itself does NOT fire any zaps (avoids weird
+  // "destroying my seal pumps my other seals" loop, matches existing 弃置 path).
+  // Consumer (`useCardOperations` → GameBoard `flushDiscardShockQueue`) handles
+  // target selection from the active row, the engagement (`beginCombat`),
+  // animation, and damage dispatch — keep the reducer side as a pure
+  // side-effect emit, identical shape to the 弃置 fire site above.
+  if (
+    (cardToDelete as GameCardData).amuletEffect !== 'discard-zap' &&
+    ae.discardShockCount > 0
+  ) {
+    sideEffects.push({
+      event: 'card:discardShock',
+      payload: { count: ae.discardShockCount },
+    });
+  }
+
   return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
 
