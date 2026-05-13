@@ -1873,7 +1873,13 @@ function reduceDisposeEquipmentCard(
     sideEffects.push({ event: 'card:equipmentSalvaged', payload: { card: salvaged, slotHint } });
     sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `残骸回收符：${card.name} 回到手牌（耐久 1/${newMaxDur}）！` } });
     sideEffects.push({ event: 'ui:banner', payload: { text: `残骸回收！${card.name} 回到手牌！` } });
-    patch.handCards = [...state.handCards, salvaged];
+    // IMPORTANT: read prior `patch.handCards` from `triggerLastWords`-fired
+    // `computeEquipmentDisplacementLastWords` (line 1835), so cards added by
+    // lastWords (`graveyard-event-to-hand` 生长之盾, `graveyard-to-hand` Iron
+    // Shield, `lastWordsGainBolt` 奥能裂变) are preserved instead of being
+    // clobbered. Mirror equipment-effects.ts:computeEquipmentBreakEffects
+    // (lines 909-913 comment) which already uses this pattern.
+    patch.handCards = [...(patch.handCards ?? state.handCards), salvaged];
     return applyPatch(state, patch, sideEffects);
   }
 
