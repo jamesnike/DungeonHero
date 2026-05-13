@@ -192,6 +192,8 @@ export function serializeGameState(state: GameState): PersistedGameState {
     graveyardDiscoverState: state.graveyardDiscoverState ? sanitizeCardList(state.graveyardDiscoverState) : null,
     graveyardDiscoverDelivery: state.graveyardDiscoverDelivery,
     ghostBladeExileCards: state.ghostBladeExileCards ? sanitizeCardList(state.ghostBladeExileCards) : null,
+    ghostBladeExileSourceLabel: state.ghostBladeExileSourceLabel,
+    ghostBladeExileQueue: state.ghostBladeExileQueue,
     handMagicUpgradeModal: state.handMagicUpgradeModal,
     mirrorCopyModal: state.mirrorCopyModal,
     monsterFusionModal: state.monsterFusionModal,

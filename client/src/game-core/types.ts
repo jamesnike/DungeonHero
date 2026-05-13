@@ -765,6 +765,25 @@ export interface GameState {
   cardActionContext: CardActionContext | null;
   equipmentPrompt: EquipmentPromptState | null;
   ghostBladeExileCards: GameCardData[] | null;
+  /**
+   * 当前 ghost-blade exile 弹窗的来源标签（卡名）—— 同步于 `ghostBladeExileCards`：
+   * 弹窗打开（`ghostBladeExileCards != null`）时是触发卡名，关闭时回到 null。
+   * 由 BEGIN_GHOST_BLADE_EXILE 写入、由 SET_GHOST_BLADE_EXILE_CARDS payload=null 清掉。
+   * 'weapon' 路径=「虚灵刀」、'amulet' 路径=「灵魂吞噬」。
+   */
+  ghostBladeExileSourceLabel: string | null;
+  /**
+   * 待显示的「坟场放逐」弹窗队列。
+   *
+   * 同一次伤害链 / 多张攻击造成多次触发时，第二次以后的触发先入队，
+   * 等当前弹窗关闭后由 SET_GHOST_BLADE_EXILE_CARDS payload=null 自动 dequeue
+   * + 再开下一个弹窗，保证 N 次触发 → N 个连续弹窗（不会被合并成 1 个）。
+   *
+   * 历史 bug：BEGIN_GHOST_BLADE_EXILE 之前直接覆盖 `ghostBladeExileCards`，
+   * 同帧多次触发只剩最后一个的候选；玩家「灵魂吞噬」/「虚灵刀」连续触发
+   * 多次时只能选 1 次，剩下的 silently 丢失。
+   */
+  ghostBladeExileQueue: Array<{ sourceLabel: string }>;
 
   // --- Shop ---  (modals)
   shopModalOpen: boolean;

@@ -207,6 +207,8 @@ export function createInitialGameState(): GameState {
     cardActionContext: null,
     equipmentPrompt: null,
     ghostBladeExileCards: null,
+    ghostBladeExileSourceLabel: null,
+    ghostBladeExileQueue: [],
 
     shopModalOpen: false,
     shopModalMinimized: false,

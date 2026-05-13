@@ -748,6 +748,15 @@ export interface RequestGraveyardSelectionAction {
 
 export interface BeginGhostBladeExileAction {
   type: 'BEGIN_GHOST_BLADE_EXILE';
+  /**
+   * 触发本次「坟场放逐」弹窗的来源标签（卡名）。
+   * 武器路径写「虚灵刀」、护符路径写「灵魂吞噬」。
+   * Reducer 把它写到 `state.ghostBladeExileSourceLabel`，由 confirm 时拼
+   * banner / log 文案。当本次触发与现有弹窗冲突时，sourceLabel 会被压入
+   * `state.ghostBladeExileQueue`，等当前弹窗关闭后由 SET_GHOST_BLADE_EXILE_CARDS
+   * payload=null 自动 dequeue + 再开下一个弹窗。
+   */
+  sourceLabel: string;
 }
 
 // ---------------------------------------------------------------------------

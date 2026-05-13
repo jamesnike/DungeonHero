@@ -263,6 +263,8 @@ export interface PersistedGameState {
   graveyardDiscoverState?: GameCardData[] | null;
   graveyardDiscoverDelivery?: 'backpack' | 'hand-first';
   ghostBladeExileCards?: GameCardData[] | null;
+  ghostBladeExileSourceLabel?: string | null;
+  ghostBladeExileQueue?: Array<{ sourceLabel: string }>;
   handMagicUpgradeModal?: { sourceCardId: string; maxSelect?: number } | null;
   mirrorCopyModal?: { sourceCardId: string } | null;
   monsterFusionModal?: { sourceCardId: string } | null;

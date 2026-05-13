@@ -317,6 +317,8 @@ function reduceForceEndHeroTurn(
     graveyardDiscoverMinimized: false,
     graveyardDiscoverDelivery: 'backpack',
     ghostBladeExileCards: null,
+    ghostBladeExileSourceLabel: null,
+    ghostBladeExileQueue: [],
     shopModalOpen: false,
     shopModalMinimized: false,
     shopSkillSelectOpen: false,

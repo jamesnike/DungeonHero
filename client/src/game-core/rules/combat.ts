@@ -755,7 +755,63 @@ function reduceDealDamageToMonster(
     if (isMonsterDefeated(updated)) {
       const { fromSlot: _fs, ...forGy } = updated as GameCardData & { fromSlot?: string };
       const graveyard = [...state.discardedCards as GameCardData[], forGy];
-      activeCards[idx] = null;
+
+      // Stack-pop: if there's a card stacked beneath the destroyed top
+      // (e.g. another 幽灵建筑 / 地雷 / 增幅祭坛 pushed into
+      // `activeCardStacks[idx]` by a prior waterfall drop or 殒雷符 mine
+      // chain), promote the stack-top into the slot instead of leaving it
+      // null. Without this, the underlying ghost building is orphaned and
+      // effectively "vanishes" when the next waterfall drop covers it.
+      //
+      // Swarm passive overrides stack-pop (matches GameBoard.tsx removeCard
+      // and rules/events.ts COMPLETE_EVENT): when a Swarm monster is on the
+      // row, force the slot to null so postProcessActiveCards step 3 spawns
+      // a Buglet there. The stacked card stays at the top of
+      // `activeCardStacks` untouched, ready to pop after the Buglet dies.
+      const stackBelow = (state.activeCardStacks ?? {})[idx] ?? [];
+      const swarmSourcePresent = activeCards.some((c, i) =>
+        c != null
+        && i !== idx
+        && c.type === 'monster'
+        && c.swarmSpawn === true
+        && c.isBuglet !== true
+        && c.isStunned !== true,
+      );
+
+      const patchOut: Partial<GameState> = { discardedCards: graveyard };
+
+      if (stackBelow.length > 0 && !swarmSourcePresent) {
+        const nextCard = stackBelow[stackBelow.length - 1];
+        activeCards[idx] = nextCard;
+        const popStacks = { ...(state.activeCardStacks ?? {}) };
+        const remaining = stackBelow.slice(0, -1);
+        if (remaining.length === 0) {
+          delete popStacks[idx];
+        } else {
+          popStacks[idx] = remaining;
+        }
+        patchOut.activeCardStacks = popStacks;
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'system', message: `堆叠揭示：「${nextCard.name}」从第 ${idx + 1} 列堆叠中浮现！` },
+        });
+        // Stack-pop keeps the slot occupied (card→card), so
+        // postProcessActiveCards step 4 (slot-clear detection) won't enqueue
+        // REGISTER_DUNGEON_CARD_PROCESSED for the destroyed building. Fire
+        // it explicitly so auto-draw / dungeon-gold amulet behavior matches
+        // the removeCard hook + rules/events.ts COMPLETE_EVENT pattern.
+        if (!state.processedDungeonCardIds.includes(monster.id)) {
+          enqueuedActions.push({
+            type: 'REGISTER_DUNGEON_CARD_PROCESSED',
+            cardId: monster.id,
+            source: 'slot-cleared',
+          });
+        }
+      } else {
+        activeCards[idx] = null;
+      }
+      patchOut.activeCards = activeCards as GameState['activeCards'];
+
       sideEffects.push({ event: 'combat:buildingDestroyed', payload: { buildingId: action.monsterId } });
       sideEffects.push({
         event: 'log:entry',
@@ -763,7 +819,7 @@ function reduceDealDamageToMonster(
       });
       return applyPatch(
         state,
-        { activeCards: activeCards as GameState['activeCards'], discardedCards: graveyard },
+        patchOut,
         sideEffects,
         enqueuedActions.length > 0 ? enqueuedActions : undefined,
       );
@@ -2769,7 +2825,49 @@ function reducePerformHeroAttack(
         patch.discardedCards = graveyard;
         const buildingCards = (patch.activeCards ?? [...state.activeCards]) as ActiveRowSlots;
         const buildingIdx = buildingCards.findIndex(c => c?.id === targetMonster.id);
-        if (buildingIdx >= 0) buildingCards[buildingIdx] = null;
+
+        // Stack-pop: if there's a card stacked beneath the destroyed building,
+        // promote it into the slot instead of leaving null. Swarm-source on
+        // the row overrides → slot null so postProcessActiveCards spawns a
+        // Buglet. Mirrors reduceDealDamageToMonster building branch + the
+        // removeCard hook in GameBoard.tsx.
+        if (buildingIdx >= 0) {
+          const stackBelow = (state.activeCardStacks ?? {})[buildingIdx] ?? [];
+          const swarmSourcePresent = buildingCards.some((c, i) =>
+            c != null
+            && i !== buildingIdx
+            && c.type === 'monster'
+            && c.swarmSpawn === true
+            && c.isBuglet !== true
+            && c.isStunned !== true,
+          );
+
+          if (stackBelow.length > 0 && !swarmSourcePresent) {
+            const nextCard = stackBelow[stackBelow.length - 1];
+            buildingCards[buildingIdx] = nextCard;
+            const popStacks = { ...(state.activeCardStacks ?? {}) };
+            const remaining = stackBelow.slice(0, -1);
+            if (remaining.length === 0) {
+              delete popStacks[buildingIdx];
+            } else {
+              popStacks[buildingIdx] = remaining;
+            }
+            patch.activeCardStacks = popStacks;
+            sideEffects.push({
+              event: 'log:entry',
+              payload: { type: 'system', message: `堆叠揭示：「${nextCard.name}」从第 ${buildingIdx + 1} 列堆叠中浮现！` },
+            });
+            if (!state.processedDungeonCardIds.includes(targetMonster.id)) {
+              enqueuedActions.push({
+                type: 'REGISTER_DUNGEON_CARD_PROCESSED',
+                cardId: targetMonster.id,
+                source: 'slot-cleared',
+              });
+            }
+          } else {
+            buildingCards[buildingIdx] = null;
+          }
+        }
         patch.activeCards = buildingCards;
         sideEffects.push({ event: 'combat:buildingDestroyed', payload: { buildingId: targetMonster.id } });
         sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `「${targetMonster.name}」已被毁坏。` } });

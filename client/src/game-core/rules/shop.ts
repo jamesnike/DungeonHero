@@ -113,7 +113,7 @@ export function reduceShopActions(state: GameState, action: GameAction): ReduceR
       return reduceRequestGraveyardSelection(state, action);
 
     case 'BEGIN_GHOST_BLADE_EXILE':
-      return reduceBeginGhostBladeExile(state);
+      return reduceBeginGhostBladeExile(state, action);
 
     default:
       return null;
@@ -1185,9 +1185,32 @@ function reduceRequestGraveyardSelection(
 
 // ---------------------------------------------------------------------------
 // BEGIN_GHOST_BLADE_EXILE — RNG shuffle graveyard for exile selection
+//
+// 多次触发的排队语义：当前已经有 ghost-blade-exile modal 打开
+// （`ghostBladeExileCards != null`）时，第二次以后的触发先入 `ghostBladeExileQueue`，
+// 等当前 modal 关闭（SET_GHOST_BLADE_EXILE_CARDS payload=null）时由 ui-state 自动
+// dequeue 并 enqueue 一条新的 BEGIN_GHOST_BLADE_EXILE，依次开下一个 modal。
+//
+// 历史 bug：旧实现直接覆盖 `ghostBladeExileCards`，同帧多次「灵魂吞噬」/
+// 「虚灵刀」触发只能选 1 次，剩下的 silently 丢失。
 // ---------------------------------------------------------------------------
 
-function reduceBeginGhostBladeExile(state: GameState): ReduceResult {
+function reduceBeginGhostBladeExile(
+  state: GameState,
+  action: Extract<GameAction, { type: 'BEGIN_GHOST_BLADE_EXILE' }>,
+): ReduceResult {
+  // 已经有 modal 打开 → 入队，等当前 modal 关闭后再开下一个。
+  // 不消耗 RNG（候选会在真正开 modal 时再 shuffle，避免提前消耗 RNG 导致
+  // 后续效果非确定性）。
+  if (state.ghostBladeExileCards != null) {
+    return applyPatch(state, {
+      ghostBladeExileQueue: [
+        ...state.ghostBladeExileQueue,
+        { sourceLabel: action.sourceLabel },
+      ],
+    });
+  }
+
   const discoverIds = new Set((state.graveyardDiscoverState ?? []).map(c => c.id));
   const eligible = discoverIds.size > 0
     ? state.discardedCards.filter(c => !discoverIds.has(c.id))
@@ -1205,5 +1228,6 @@ function reduceBeginGhostBladeExile(state: GameState): ReduceResult {
   return applyPatch(state, {
     rng: nextRng,
     ghostBladeExileCards: options,
+    ghostBladeExileSourceLabel: action.sourceLabel,
   }, sideEffects);
 }

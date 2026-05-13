@@ -4432,6 +4432,8 @@ export default function GameBoard() {
       graveyardDiscoverMinimized: Boolean(snapshot.graveyardDiscoverMinimized),
       graveyardDiscoverDelivery: snapshot.graveyardDiscoverDelivery ?? 'backpack',
       ghostBladeExileCards: snapshot.ghostBladeExileCards ?? null,
+      ghostBladeExileSourceLabel: snapshot.ghostBladeExileSourceLabel ?? null,
+      ghostBladeExileQueue: Array.isArray(snapshot.ghostBladeExileQueue) ? snapshot.ghostBladeExileQueue : [],
       handMagicUpgradeModal: snapshot.handMagicUpgradeModal ?? null,
       mirrorCopyModal: snapshot.mirrorCopyModal ?? null,
       monsterFusionModal: snapshot.monsterFusionModal ?? null,
