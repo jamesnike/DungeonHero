@@ -2551,7 +2551,11 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="震慑：入场时随机弃回一张手牌">震慑</span>
                     )}
                     {card.dragonAttackNoLayerCost && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="龙鳞：上回合掉过血层时，本次攻击不消耗血层">龙鳞</span>
+                      <span
+                        className={`dh-card__keyword-tag ${card.dragonNoLayerCostActive ? 'dh-card__keyword-tag--revive' : 'dh-card__keyword-tag--revive-used'}`}
+                        title={card.dragonNoLayerCostActive ? '龙鳞（已激活）：本次攻击不消耗血层' : '龙鳞：上回合掉过血层时，本次攻击不消耗血层'}>
+                        龙鳞
+                      </span>
                     )}
                     {card.dragonDamageRetaliation != null && card.dragonDamageRetaliation > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title={`龙息：每受到一次伤害，对玩家造成 ${card.dragonDamageRetaliation} 点法术伤害`}>龙息</span>

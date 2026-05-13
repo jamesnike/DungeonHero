@@ -1505,8 +1505,20 @@ function reduceDecrementFury(
   }
 
   if (monster.dragonAttackNoLayerCost && monster.dragonNoLayerCostActive && !monster.isStunned) {
+    // 「被动·龙鳞」float — gives the player a visible banner above the dragon
+    // confirming the layer-cost was absorbed, parallel to how 龙息
+    // (`reflect:dragonBreath`) and 破甲 (`reflect:dragonBleedDestroy`) advertise
+    // themselves. Without this the only feedback was a log line that's easy to
+    // miss in the noisy combat log. The float must be enqueued (not just a side
+    // effect) so the pipeline `awaitingSkillFloat` hard-pause fires — see
+    // `reduceTriggerMonsterSkillFloat` and `monsterSkillNames.ts`.
+    enqueuedActions.push({
+      type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+      monsterId: action.monsterId,
+      skillKey: 'passive:dragonScales',
+    });
     sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 龙鳞：上回合已掉血层，本次攻击不消耗血层！` } });
-    return applyPatch(state, {}, sideEffects);
+    return applyPatch(state, {}, sideEffects, enqueuedActions);
   }
 
   const currentLayer = monster.currentLayer ?? monster.hpLayers ?? monster.fury ?? 1;

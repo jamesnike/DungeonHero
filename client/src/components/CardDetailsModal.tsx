@@ -397,7 +397,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 shrink-0 text-amber-500" />
                     <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
-                      龙鳞
+                      龙鳞 {card.dragonNoLayerCostActive ? '（已激活）' : ''}
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">

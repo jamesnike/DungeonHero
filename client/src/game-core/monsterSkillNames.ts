@@ -63,6 +63,7 @@ export type MonsterSkillKey =
   | 'passive:swarmSpawn'
   | 'passive:swarmHordeRage'
   | 'passive:lowGoldEliteBuff'
+  | 'passive:dragonScales'
   // 瀑布相关
   | 'waterfall:wraithEnrage';
 
@@ -156,6 +157,8 @@ export function getMonsterSkillEntry(key: MonsterSkillKey): MonsterSkillEntry {
       return { name: '被动·集结', kind: 'passive' };
     case 'passive:lowGoldEliteBuff':
       return { name: '被动·窘境', kind: 'passive' };
+    case 'passive:dragonScales':
+      return { name: '被动·龙鳞', kind: 'passive' };
 
     // 瀑布
     case 'waterfall:wraithEnrage':

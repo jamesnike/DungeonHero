@@ -45,6 +45,7 @@ import { reduce } from '../reducer';
 import { createInitialGameState } from '../state';
 import { initialCombatState } from '../constants';
 import { endHeroTurnPatch } from '../combat';
+import { getMonsterSkillName } from '../monsterSkillNames';
 import type { GameState } from '../types';
 import type { ActiveRowSlots } from '@/components/game-board/types';
 import type { GameCardData } from '@/components/GameCard';
@@ -234,6 +235,52 @@ describe('DECREMENT_FURY × 龙鳞 — end-to-end', () => {
     expect(result.enqueuedActions.some(a => a.type === 'MONSTER_DEFEATED')).toBe(false);
   });
 
+  it('flag=true: enqueues TRIGGER_MONSTER_SKILL_FLOAT for 被动·龙鳞 banner', () => {
+    // Visible-feedback contract: when 龙鳞 absorbs a layer cost, the dragon
+    // gets a floating "被动·龙鳞" banner above it (parallel to 龙息 / 破甲).
+    // Without this the only feedback was a log line easy to miss in the noisy
+    // combat log.
+    const dragon = makeDragon({
+      id: 'd1',
+      currentLayer: 2,
+      dragonNoLayerCostActive: true,
+    });
+    const state = makeState({
+      activeCards: activeRowOf(dragon),
+      combatState: { ...initialCombatState, engagedMonsterIds: [dragon.id] },
+    });
+    const result = reduce(state, { type: 'DECREMENT_FURY', monsterId: dragon.id });
+    expect(result.enqueuedActions).toContainEqual(
+      expect.objectContaining({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: dragon.id,
+        skillKey: 'passive:dragonScales',
+      }),
+    );
+  });
+
+  it('flag=false: NO skill float (only fires when 龙鳞 actually absorbs a cost)', () => {
+    // Regression guard: the float must not be enqueued unconditionally — it
+    // should only appear when the gate (`dragonAttackNoLayerCost && active &&
+    // !stunned`) is satisfied. A normal dragon attack with no buff active
+    // should not show "被动·龙鳞" since nothing was actually absorbed.
+    const dragon = makeDragon({
+      id: 'd1',
+      currentLayer: 2,
+      dragonNoLayerCostActive: false,
+    });
+    const state = makeState({
+      activeCards: activeRowOf(dragon),
+      combatState: { ...initialCombatState, engagedMonsterIds: [dragon.id] },
+    });
+    const result = reduce(state, { type: 'DECREMENT_FURY', monsterId: dragon.id });
+    const dragonScalesFloat = (result.enqueuedActions ?? []).find(
+      a => a.type === 'TRIGGER_MONSTER_SKILL_FLOAT'
+        && (a as { skillKey?: string }).skillKey === 'passive:dragonScales',
+    );
+    expect(dragonScalesFloat).toBeUndefined();
+  });
+
   it('flag=false: dragon attack consumes a layer normally (control)', () => {
     const dragon = makeDragon({
       id: 'd1',
@@ -391,5 +438,20 @@ describe('END_TURN → DECREMENT_FURY — user-reported regression', () => {
     // Monster turn 2: dragon attacks → costs layer normally.
     state = reduce(state, { type: 'DECREMENT_FURY', monsterId: dragon.id }).state;
     expect((state.activeCards[0] as GameCardData).currentLayer).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Skill-name registry round-trip
+// ---------------------------------------------------------------------------
+
+describe('monsterSkillNames — passive:dragonScales', () => {
+  it('registers the display name "被动·龙鳞"', () => {
+    // Pin the display name. If someone renames the key without touching the
+    // registry, the exhaustive switch's compile check catches that — but a
+    // silent rename of the *display name* itself (e.g. via copy-paste from
+    // another entry) would slip through. This test pins the player-facing
+    // string.
+    expect(getMonsterSkillName('passive:dragonScales')).toBe('被动·龙鳞');
   });
 });
