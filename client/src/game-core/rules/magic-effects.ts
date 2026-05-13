@@ -4231,6 +4231,11 @@ export function resolveKnightPermanentMagic(
 
         // Trigger one discover immediately, queue the rest. Each modal close
         // will dequeue the next one via SET_DISCOVER_MODAL { open: false }.
+        // delivery: 'hand-first' — discovered cards land directly in hand
+        // (subject to handLimit), falling back to backpack → recycle bag on
+        // overflow. Mirrors 「专属感召」 (starter-discover-class-to-hand) UX:
+        // the destroyed equipment freed up board state and the player wants
+        // the new tools immediately castable, not buried in the backpack.
         const classDeck = state.classDeck ?? [];
         if (classDeck.length > 0) {
           enqueuedActions.push({
@@ -4238,12 +4243,14 @@ export function resolveKnightPermanentMagic(
             source: 'discard-rebuild',
             pool: classDeck,
             sourceLabel: card.name,
+            delivery: 'hand-first',
           });
           if (totalDiscoverCount > 1) {
             const remaining = totalDiscoverCount - 1;
             const queueAddition = Array.from({ length: remaining }, () => ({
-              source: 'discard-rebuild',
+              source: 'discard-rebuild' as const,
               sourceLabel: card.name,
+              delivery: 'hand-first' as const,
             }));
             patch.pendingClassDiscoverQueue = [
               ...state.pendingClassDiscoverQueue,

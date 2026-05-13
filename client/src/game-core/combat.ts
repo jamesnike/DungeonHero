@@ -1318,11 +1318,23 @@ export function applyWraithHauntEffect(
   let rng = rngIn;
   let [shuffled, nextRng] = rngShuffle(occupiedCards, rng);
   rng = nextRng;
+  // 「同行卡牌位置打乱」是 wraith-haunt 的卡面承诺，所以只要场上有 ≥2 张可被
+  // 打乱的卡（普通怪物 / 幽灵建筑 / 地雷 etc.），就必须真的让它们换位。
+  //
+  // Fisher-Yates 对 2 张牌有 50% 概率返回 identity，单次 retry 仍有 25% 概率
+  // identity。User 实测：(wraith, monster, mine_with_stacked_mine_below) seed=13
+  // 连续两次 shuffle 都是 identity → 完全不换位，玩家看到「缠绕触发了但没动」。
+  //
+  // 因此把 retry 改成 loop：直到拿到非 identity permutation 或达到 MAX_RETRIES。
+  // 上限 8 次让最坏情况（2 张牌全部 identity）概率降到 0.5^9 ≈ 0.2%，对实际
+  // 玩家来说等价于「一定会换位」。
+  const MAX_SHUFFLE_RETRIES = 8;
   if (occupiedCards.length >= 2) {
-    const sameOrder = shuffled.every((c, i) => c === occupiedCards[i]);
-    if (sameOrder) {
+    let attempts = 0;
+    while (attempts < MAX_SHUFFLE_RETRIES && shuffled.every((c, i) => c === occupiedCards[i])) {
       [shuffled, nextRng] = rngShuffle(occupiedCards, rng);
       rng = nextRng;
+      attempts++;
     }
   }
 

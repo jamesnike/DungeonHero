@@ -249,11 +249,11 @@ function reduceEndTurn(
 }
 
 // ---------------------------------------------------------------------------
-// FORCE_END_HERO_TURN — auto-end on 40s timer expiry
+// FORCE_END_HERO_TURN — auto-end on 60s timer expiry (120s in boss rooms)
 // ---------------------------------------------------------------------------
 
 /**
- * 40s 倒计时归零时的强制收尾。
+ * 倒计时归零时的强制收尾（60s 普通战 / 120s boss 战）。
  *
  * 1. 救援「卡在 modal 里的卡」(magic / potion)：interactive 卡（如 净册涌泉、
  *    淬炼药剂）打出后唯一的引用就在 `pendingMagicAction.card` /

@@ -851,3 +851,261 @@ describe('弃装重铸 (discard-rebuild) + 残骸回收符 + monster equipment',
     expect(final.discardedCards.find(c => c.id === 'm-goblin-1')).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// 7. lastWords trigger BEFORE salvage zeros out maxDur (vanish path)
+// ---------------------------------------------------------------------------
+//
+// 用户报告："耐久 1 的装备/怪物装备 + 残骸回收符 销毁时，遗言应该先触发，
+// 然后再 maxDur-1 让它消失。"
+//
+// 实测：当前代码 `computeEquipmentBreakEffects` 已经把 lastWords 循环放在
+// salvage 计算之前（equipment-effects.ts L940-960 lastWords loop → L1066-1080
+// salvage check）。这一节测试把"先 lastWords 后消失"的顺序作为不变量锁住，
+// 覆盖全部 4 条销毁路径（自然破损 + 顶替 + 弃装重铸 magic + RESOLVE_BLOCK），
+// 防止未来重构时把顺序搞反。
+
+describe('残骸回收符 + maxDur=1 — lastWords FIRES before vanish (4 paths)', () => {
+  // -------------------------------------------------------------------------
+  // P1: combat tick 自然破损 → computeEquipmentBreakEffects
+  // -------------------------------------------------------------------------
+  describe('P1: 自然破损 (computeEquipmentBreakEffects)', () => {
+    it('weapon maxDur=1 + onDestroyDraw=2 + 1 salvage → drawFromBackpack=2, weapon vanishes', () => {
+      const weapon: GameCardData = {
+        id: 'w-vanish-1',
+        type: 'weapon',
+        name: '消失之刃',
+        value: 3,
+        image: '',
+        durability: 0,
+        maxDurability: 1,
+        onDestroyDraw: 2,
+      } as GameCardData;
+      const state = makeState({
+        equipmentSlot1: weapon as EquipmentItem,
+        amuletSlots: [makeSalvageAmulet(), null, null, null, null] as any,
+        backpackItems: [],
+      });
+
+      const r = computeEquipmentBreakEffects(
+        state,
+        'equipmentSlot1',
+        weapon,
+        { ...createEmptyAmuletEffects(), equipmentSalvageCount: 1 },
+      );
+
+      expect(r.destroyed).toBe(true);
+      expect(r.drawFromBackpack).toBe(2);
+      expect(r.patch.equipmentSlot1).toBeNull();
+      expect((r.patch.handCards as GameCardData[] | undefined)?.find(c => c.id === 'w-vanish-1')).toBeUndefined();
+      expect((r.patch.discardedCards as GameCardData[] | undefined)?.find(c => c.id === 'w-vanish-1')).toBeUndefined();
+    });
+
+    it('shield maxDur=1 + onDestroyClassDraw=1 + 1 salvage → classCardDraw=1, shield vanishes', () => {
+      const shield: GameCardData = {
+        id: 'heavy-shield-1',
+        type: 'shield',
+        name: 'Heavy Shield',
+        value: 4,
+        image: '',
+        durability: 0,
+        maxDurability: 1,
+        armorMax: 4,
+        damageReflect: 1,
+        onDestroyClassDraw: 1,
+      } as GameCardData;
+      const state = makeState({
+        equipmentSlot1: shield as EquipmentItem,
+        amuletSlots: [makeSalvageAmulet(), null, null, null, null] as any,
+      });
+
+      const r = computeEquipmentBreakEffects(
+        state,
+        'equipmentSlot1',
+        shield,
+        { ...createEmptyAmuletEffects(), equipmentSalvageCount: 1 },
+      );
+
+      expect(r.destroyed).toBe(true);
+      expect(r.classCardDraw).toBe(1);
+      expect(r.patch.equipmentSlot1).toBeNull();
+      expect((r.patch.handCards as GameCardData[] | undefined)?.find(c => c.id === 'heavy-shield-1')).toBeUndefined();
+    });
+
+    it('monster equipment maxDur=1 (1 layer) + onDestroyDraw=2 + 1 salvage → drawFromBackpack=2, monster vanishes', () => {
+      const monster = makeGoblinEquip({
+        id: 'm-vanish-mon',
+        maxDurability: 1,
+        fury: 1,
+        hpLayers: 1,
+        currentLayer: 1,
+        rageTurn: 1,
+        onDestroyDraw: 2,
+      });
+      const state = makeState({
+        equipmentSlot1: monster as EquipmentItem,
+        amuletSlots: [makeSalvageAmulet(), null, null, null, null] as any,
+      });
+
+      const r = computeEquipmentBreakEffects(
+        state,
+        'equipmentSlot1',
+        monster,
+        { ...createEmptyAmuletEffects(), equipmentSalvageCount: 1 },
+      );
+
+      expect(r.destroyed).toBe(true);
+      expect(r.drawFromBackpack).toBe(2);
+      expect(r.patch.equipmentSlot1).toBeNull();
+      expect((r.patch.handCards as GameCardData[] | undefined)?.find(c => c.id === 'm-vanish-mon')).toBeUndefined();
+      expect((r.patch.discardedCards as GameCardData[] | undefined)?.find(c => c.id === 'm-vanish-mon')).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // P2: DISPOSE_EQUIPMENT_CARD 顶替路径 (triggerLastWords:true)
+  // -------------------------------------------------------------------------
+  describe('P2: DISPOSE_EQUIPMENT_CARD 顶替 (triggerLastWords:true)', () => {
+    it('weapon maxDur=1 + onDestroyGold=10 → gold +10, weapon vanishes', () => {
+      const weapon: GameCardData = {
+        id: 'w-displace-1',
+        type: 'weapon',
+        name: '顶替之刃',
+        value: 3,
+        image: '',
+        durability: 1,
+        maxDurability: 1,
+        onDestroyGold: 10,
+      } as GameCardData;
+      const state = makeState({
+        equipmentSlot1: weapon as EquipmentItem,
+        amuletSlots: [makeSalvageAmulet(), null, null, null, null] as any,
+        gold: 100,
+        handCards: [],
+      });
+
+      const r = reduce(state, {
+        type: 'DISPOSE_EQUIPMENT_CARD',
+        card: weapon,
+        isDestruction: true,
+        triggerLastWords: true,
+        fromSlotId: 'equipmentSlot1',
+      });
+      const final = drain(r.state, r.enqueuedActions ?? []).state;
+
+      expect(final.gold).toBe(110);
+      expect(final.handCards.find(c => c.id === 'w-displace-1')).toBeUndefined();
+      expect(final.discardedCards.find(c => c.id === 'w-displace-1')).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // P3: 弃装重铸 magic (PLAY_CARD chain)
+  // -------------------------------------------------------------------------
+  describe('P3: 弃装重铸 magic (PLAY_CARD chain)', () => {
+    it('weapon maxDur=1 + onDestroyGold=20 + 1 salvage → gold +20, weapon vanishes', () => {
+      const drCard = makeDiscardRebuildCard('vanish');
+      const weapon: GameCardData = {
+        id: 'w-rebuild-1',
+        type: 'weapon',
+        name: '重铸之刃',
+        value: 3,
+        image: '',
+        durability: 1,
+        maxDurability: 1,
+        onDestroyGold: 20,
+      } as GameCardData;
+      const state = makeState({
+        handCards: [drCard],
+        equipmentSlot1: weapon as EquipmentItem,
+        equipmentSlot2: null,
+        amuletSlots: [makeSalvageAmulet(), null, null, null, null] as any,
+        classDeck: [makeClassCardForDiscover('c1')],
+        gold: 100,
+      });
+
+      const final = drain(state, [{ type: 'PLAY_CARD', cardId: drCard.id } as any]).state;
+
+      expect(final.gold).toBe(120);
+      expect(final.equipmentSlot1).toBeNull();
+      expect(final.handCards.find(c => c.id === 'w-rebuild-1')).toBeUndefined();
+      expect(final.discardedCards.find(c => c.id === 'w-rebuild-1')).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // P4: Heavy Shield + RESOLVE_BLOCK (用户报告的实际游戏路径)
+  // -------------------------------------------------------------------------
+  describe('P4: Heavy Shield + RESOLVE_BLOCK (用户报告路径)', () => {
+    it('Heavy Shield (1/1) + 残骸回收符 + 格挡 5-attack monster → equipment:classCardDraw fired, shield vanishes', () => {
+      const shield: GameCardData = {
+        id: 'heavy-shield-1',
+        type: 'shield',
+        name: 'Heavy Shield',
+        value: 4,
+        image: '',
+        durability: 1,
+        maxDurability: 1,
+        armorMax: 4,
+        damageReflect: 1,
+        onDestroyClassDraw: 1,
+      } as GameCardData;
+      const monster: GameCardData = {
+        id: 'mon-attacker-1',
+        type: 'monster',
+        name: '攻击者',
+        value: 5,
+        hp: 10,
+        maxHp: 10,
+        attack: 5,
+      } as GameCardData;
+
+      const state = makeState({
+        equipmentSlot1: shield as EquipmentItem,
+        activeCards: [monster, null, null, null, null] as ActiveRowSlots,
+        amuletSlots: [makeSalvageAmulet(), null, null, null, null] as any,
+        classDeck: [
+          makeClassCardForDiscover('c1'),
+          makeClassCardForDiscover('c2'),
+        ],
+        hp: 30,
+        combatState: {
+          ...initialCombatState,
+          engagedMonsterIds: [monster.id],
+          currentTurn: 'monster',
+          pendingBlock: {
+            monsterId: monster.id,
+            attackValue: 5,
+            monsterName: monster.name,
+          },
+        },
+      });
+
+      const r = reduce(state, {
+        type: 'RESOLVE_BLOCK',
+        choice: 'shield',
+        slotId: 'equipmentSlot1',
+      } as any);
+      const final = drain(r.state, r.enqueuedActions ?? []).state;
+
+      // Shield gone — neither in slot, hand, nor graveyard.
+      expect(final.equipmentSlot1).toBeNull();
+      expect(final.handCards.find(c => c.id === 'heavy-shield-1')).toBeUndefined();
+      expect(final.discardedCards.find(c => c.id === 'heavy-shield-1')).toBeUndefined();
+
+      // lastWords side effect emitted BEFORE shield vanished — UI listener
+      // (GameBoard:1579 useGameEvent('equipment:classCardDraw')) will dispatch
+      // DRAW_CLASS_TO_BACKPACK in response.
+      const classDrawEvents = r.sideEffects.filter(e => e.event === 'equipment:classCardDraw');
+      expect(classDrawEvents.length).toBeGreaterThan(0);
+      expect((classDrawEvents[0].payload as any).count).toBe(1);
+
+      // 遗言 banner / log fires too.
+      const lastWordsLog = r.sideEffects.find(e =>
+        e.event === 'log:entry' &&
+        (e.payload as any)?.message?.includes('Heavy Shield 遗言触发！'),
+      );
+      expect(lastWordsLog).toBeDefined();
+    });
+  });
+});

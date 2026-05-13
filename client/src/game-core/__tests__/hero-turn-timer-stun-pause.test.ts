@@ -4,7 +4,7 @@
  * Feature: while ANY monster on the active row has `isStunned: true`, the
  * hero turn countdown freezes (`playerTurnPausedAt` is set to the moment
  * the stun appeared). When all stuns clear, the timer **resets to its full
- * duration** (40s normal / 100s boss): `playerTurnStartedAt` is shifted to
+ * duration** (60s normal / 120s boss): `playerTurnStartedAt` is shifted to
  * a fresh `Date.now()` and `playerTurnPausedAt` is cleared.
  *
  * The transition logic lives in `postProcessTurnTimerPause` in `reducer.ts`

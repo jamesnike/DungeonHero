@@ -94,6 +94,32 @@ export function reduceUIStateActions(
 
     case 'SET_GHOST_BLADE_EXILE_CARDS': {
       const enqueuedActions: GameAction[] = [];
+      const patch: Partial<GameState> = { ghostBladeExileCards: action.payload };
+      // 关闭弹窗（payload=null）时清掉绑定的 sourceLabel；非 null 时由
+      // BEGIN_GHOST_BLADE_EXILE 已经写好 sourceLabel，这里不要覆盖。
+      if (action.payload === null) {
+        patch.ghostBladeExileSourceLabel = null;
+      }
+      // 弹窗关闭时（payload=null）按顺序处理后续 modal：
+      //
+      //   1. ghostBladeExileQueue 非空 → pop 队首 + enqueue 一条新的
+      //      BEGIN_GHOST_BLADE_EXILE，开下一个「坟场放逐」弹窗。
+      //      (这条优先级高于 monsterReward / pendingClassDiscover，因为同一次
+      //       伤害链产生的多条 ghost-blade 触发应该先全部消化完，再去结算
+      //       怪物奖励 / 战痕之符 等独立流程。)
+      //   2. 同时按已有逻辑 enqueue DEQUEUE_MONSTER_REWARD —— 它内部 gate
+      //      会检查 `state.ghostBladeExileCards`，新弹窗开起来后这条 dequeue
+      //      会变成 noChange，等下一轮再机会触发；如果队列里的 ghost-blade
+      //      触发都没了（即步骤 1 没 enqueue），它会照常 drain monsterReward /
+      //      pendingClassDiscover。
+      if (action.payload === null && state.ghostBladeExileQueue.length > 0) {
+        const [head, ...rest] = state.ghostBladeExileQueue;
+        patch.ghostBladeExileQueue = rest;
+        enqueuedActions.push({
+          type: 'BEGIN_GHOST_BLADE_EXILE',
+          sourceLabel: head.sourceLabel,
+        });
+      }
       // When the ghost-blade exile modal closes (payload=null), drain any
       // pending follow-ups. `reduceDequeueMonsterReward` is now the unified
       // drain site — it advances `monsterRewardQueue` if non-empty, OR drains
@@ -107,7 +133,7 @@ export function reduceUIStateActions(
       ) {
         enqueuedActions.push({ type: 'DEQUEUE_MONSTER_REWARD' });
       }
-      return applyPatch(state, { ghostBladeExileCards: action.payload }, [], enqueuedActions.length > 0 ? enqueuedActions : undefined);
+      return applyPatch(state, patch, [], enqueuedActions.length > 0 ? enqueuedActions : undefined);
     }
 
     case 'SET_PREVIEW_CARDS':

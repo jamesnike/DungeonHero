@@ -1349,7 +1349,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
 
   // 弃装重铸 (Perm 2)：对所有装备生效——左右栏的主装备 + 每一件下层 reserve
   // 都算独立一件。每件独立判定复生：没复生就摧毁（遗言照常触发），复生的
-  // 留在原层 1 耐久。每一件（含复生）都触发一次专属发现，依次弹窗。
+  // 留在原层 1 耐久。每一件（含复生）都触发一次专属发现，依次弹窗——
+  // 发现的牌直接进入手牌（hand-first delivery），手牌满了才回退到背包/回收袋。
   pushCard({
     type: 'magic',
     name: '弃装重铸',
@@ -1357,10 +1358,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: dedupeKnightMagicGraveNovaImage,
     classCard: true,
     description:
-      '永久：对左右装备栏每一件装备（含下层叠加）独立生效——没复生的摧毁，复生的留在原层 1 耐久。每件装备发现一张专属牌（依次弹窗）。装备的遗言照常触发。',
-    shortDescription: '摧毁所有装备，每件装备（含下层）：发现 1 张专属牌',
+      '永久：对左右装备栏每一件装备（含下层叠加）独立生效——没复生的摧毁，复生的留在原层 1 耐久。每件装备发现一张专属牌加入手牌（依次弹窗，手牌满则回退到背包）。装备的遗言照常触发。',
+    shortDescription: '摧毁所有装备，每件装备（含下层）：发现 1 张专属牌加入手牌',
     magicType: 'permanent',
-    magicEffect: '对所有装备（含下层 reserve）各发现一张专属牌，并尝试摧毁；复生在原层 1 耐久。',
+    magicEffect: '对所有装备（含下层 reserve）各发现一张专属牌加入手牌，并尝试摧毁；复生在原层 1 耐久。',
     knightEffect: 'discard-rebuild',
     recycleDelay: 2,
     maxUpgradeLevel: 0,

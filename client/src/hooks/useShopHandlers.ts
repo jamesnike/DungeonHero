@@ -100,13 +100,6 @@ export interface ShopHandlersDeps {
   >;
   graveyardDiscoverDeliveryRef: React.MutableRefObject<'backpack' | 'hand-first'>;
   ghostBladeExileResolverRef: React.MutableRefObject<(() => void) | null>;
-  /**
-   * 当前 ghost blade exile 弹窗的触发源（卡名）—— 用于 confirm 时拼 banner / log
-   * 文案。武器路径写「虚灵刀」、护符路径写「灵魂吞噬」。listener 触发
-   * triggerGhostBladeExile(sourceLabel) 时存进来；handleGhostBladeExileConfirm
-   * 读出来 + 用完清空。
-   */
-  ghostBladeExileSourceLabelRef: React.MutableRefObject<string>;
   /** 从专属发现弹窗完成时调用（药水「灵思药剂」等），替代 completeCurrentEvent */
   discoverPotionCompletionRef: React.MutableRefObject<((payload: { banner: string }) => void) | null>;
   onNewCardGainedRef: React.MutableRefObject<((count: number, source?: 'graveyard' | 'classPool') => void) | null>;
@@ -160,6 +153,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
     discoverOptions: s.discoverOptions,
     graveyardDiscoverState: s.graveyardDiscoverState,
     ghostBladeExileCards: s.ghostBladeExileCards,
+    ghostBladeExileSourceLabel: s.ghostBladeExileSourceLabel,
     cardActionContext: s.cardActionContext,
     activeMonsterReward: s.activeMonsterReward,
     equipmentSlot1: s.equipmentSlot1,
@@ -184,6 +178,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
     discoverOptions,
     graveyardDiscoverState,
     ghostBladeExileCards,
+    ghostBladeExileSourceLabel,
     cardActionContext,
     activeMonsterReward,
   } = gs;
@@ -560,9 +555,17 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         : graveyard;
       if (eligible.length === 0) return Promise.resolve();
 
-      depsRef.current.ghostBladeExileSourceLabelRef.current = sourceLabel;
-      dispatch({ type: 'BEGIN_GHOST_BLADE_EXILE' });
+      // sourceLabel 通过 action 直接传给 reducer（不再走 ref）——这样多次
+      // 触发时每条 action 自带自己的 sourceLabel，reducer 可以一次性把它写进
+      // `state.ghostBladeExileSourceLabel`（当前弹窗）或 `ghostBladeExileQueue`
+      // （等待中），不会被后来的 trigger 覆盖。详见 BEGIN_GHOST_BLADE_EXILE
+      // action 的 JSDoc 和 `reduceBeginGhostBladeExile` 的 queueing 逻辑。
+      dispatch({ type: 'BEGIN_GHOST_BLADE_EXILE', sourceLabel });
 
+      // Promise + resolver ref 的契约保留：当弹窗关闭（玩家 confirm）时
+      // resolver 被调用。调用方目前没有 await（`useCombatActions` 是 fire &
+      // forget），但保留 resolver 防御性兼容未来需要 await 的场景（如「连续
+      // 触发的下一个弹窗等本次关闭再开」的同步链）。
       return new Promise<void>(resolve => {
         depsRef.current.ghostBladeExileResolverRef.current = resolve;
       });
@@ -572,7 +575,10 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
 
   const handleGhostBladeExileConfirm = useCallback(
     (selectedIds: string[]) => {
-      const sourceLabel = depsRef.current.ghostBladeExileSourceLabelRef.current || '虚灵刀';
+      // 当前弹窗的 sourceLabel 由 reducer 写在 `state.ghostBladeExileSourceLabel`
+      // 上（BEGIN_GHOST_BLADE_EXILE 时绑定）。fallback「虚灵刀」用于早期
+      // 存档兼容（旧版本没存这个字段时 hydrate 后是 null）。
+      const sourceLabel = ghostBladeExileSourceLabel || '虚灵刀';
       if (selectedIds.length > 0) {
         dispatch({ type: 'UPDATE_DISCARDED_CARDS', updater: prev => {
           const exileSet = new Set(selectedIds);
@@ -586,12 +592,14 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         depsRef.current.addGameLog('equip', `${sourceLabel}放逐：${exiledNames.join('、')} 被移除出游戏。`);
         dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${sourceLabel}放逐了 ${exiledNames.join('、')}！` });
       }
+      // SET_GHOST_BLADE_EXILE_CARDS payload=null 在 reducer 里负责
+      // dequeue ghostBladeExileQueue → enqueue 下一条 BEGIN_GHOST_BLADE_EXILE，
+      // 自动开队列里下一个弹窗（详见 ui-state.ts 同名 case 的注释）。
       dispatch({ type: 'SET_GHOST_BLADE_EXILE_CARDS', payload: null });
       depsRef.current.ghostBladeExileResolverRef.current?.();
       depsRef.current.ghostBladeExileResolverRef.current = null;
-      depsRef.current.ghostBladeExileSourceLabelRef.current = '';
     },
-    [ghostBladeExileCards, dispatch],
+    [ghostBladeExileCards, ghostBladeExileSourceLabel, dispatch],
   );
 
   // -- Card action (delete / discard) -----------------------------------------

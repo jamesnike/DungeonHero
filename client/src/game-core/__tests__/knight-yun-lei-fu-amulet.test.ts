@@ -414,6 +414,113 @@ describe('殒雷符：动画期间不预先生成', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 6.5) Regression: dying monster (defeatProcessed=true) must NEVER be pushed
+//      into activeCardStacks by the mine spawn while it's still in the slot.
+//
+//      Real-game trigger paths (any reducer that creates a fresh `{ ...c, ... }`
+//      ref for the dying monster's slot before `removeCard` clears it):
+//        - wraithDeathHeal / wraithDeathHealSpread / Skeleton re-revive on
+//          another monster N's death — they `.map()` over activeCards and
+//          rebuild non-N monster slots (including the still-defeatProcessed
+//          M) via `{ ...c, hp: ... }`, breaking ref equality.
+//        - Any future reducer that touches activeCards via .map with `{ ...c }`
+//          for the dying monster's slot.
+//
+//      The previous spawn check `if (curr === prev) continue` (reference
+//      equality) failed in these paths, causing the dying monster card to be
+//      pushed into `activeCardStacks[col]` underneath the freshly spawned
+//      mines — user-visible as "灰色的死掉的 monster 卡没有去坟场，而是被
+//      新生成的地雷压在了下面". Fix: compare by `id` (semantic identity) —
+//      "monster still in slot" ≡ "slot has a card with the same id".
+// ---------------------------------------------------------------------------
+
+describe('殒雷符：dying monster 在 slot 时 ref 被改不应该被压进 stack', () => {
+  it('sibling reduce 给 dying monster slot 写入 fresh ref ({...c}) → 不生成地雷', () => {
+    // Setup: monster已经被 MONSTER_DEFEATED 标记 defeatProcessed=true，
+    // 但仍在 slot 里等 removeCard 的 setTimeout 触发 UPDATE_ACTIVE_CARDS。
+    const dying: GameCardData = {
+      ...makeMonster('m-still-here', { hp: 0, maxHp: 5, fury: 1, currentLayer: 0, hpLayers: 1 }),
+      defeatProcessed: true,
+    };
+    const amulet = makeAmulet();
+    const state = makeState({
+      activeCards: activeRowOf(null, dying, null, null, null),
+      amuletSlots: fillAmuletSlot(amulet),
+    });
+
+    // 模拟 wraithDeathHeal 等"sibling 死亡时遍历 row 用 {...c} 给所有怪物
+    // 重新建 ref"的真实场景。这正是复现 user 报告 bug 的真实路径。
+    const result = reduce(state, {
+      type: 'UPDATE_ACTIVE_CARDS',
+      updater: prev =>
+        prev.map(c => (c ? { ...c } : c)) as unknown as typeof prev,
+    });
+
+    const slot1 = (result.state.activeCards as any[])[1];
+    // 怪物还在 slot（同 id）→ 不应该生成地雷
+    expect(slot1?.id).toBe('m-still-here');
+    expect(slot1?.defeatProcessed).toBe(true);
+    expect(isMine(slot1)).toBe(false);
+    // 关键：dying monster 没被压进 stack
+    const stack1 = result.state.activeCardStacks[1] ?? [];
+    expect(stack1.some(c => c?.id === 'm-still-here')).toBe(false);
+    expect(stack1.length).toBe(0);
+  });
+
+  it('dying monster 真的离开 slot 后 (curr=null)，仍按预期生成地雷', () => {
+    // 修复之后必须保留原行为：slot 真清空后地雷照样生成。
+    const dying = { ...makeMonster('m-leaving'), defeatProcessed: true };
+    const amulet = makeAmulet();
+    const state = makeState({
+      activeCards: activeRowOf(null, null, dying, null, null),
+      amuletSlots: fillAmuletSlot(amulet),
+    });
+
+    const result = reduce(state, {
+      type: 'UPDATE_ACTIVE_CARDS',
+      updater: prev => {
+        const next = [...prev] as any;
+        next[2] = null;
+        return next;
+      },
+    });
+
+    expect(isMine((result.state.activeCards as any[])[2])).toBe(true);
+    expect((result.state.activeCardStacks[2] ?? []).length).toBe(1);
+    expect(isMine(result.state.activeCardStacks[2][0] as any)).toBe(true);
+  });
+
+  it('dying monster 被另一张不同 id 的卡替换 (stack-pop / swarm)，仍按预期生成地雷', () => {
+    // 修复之后必须保留原行为：不同 id 的新卡填进 slot → 地雷照样在它头上堆。
+    const dying = { ...makeMonster('m-replaced'), defeatProcessed: true };
+    const newcomer = makeMonster('m-newcomer');
+    const amulet = makeAmulet();
+    const state = makeState({
+      activeCards: activeRowOf(dying, null, null, null, null),
+      amuletSlots: fillAmuletSlot(amulet),
+    });
+
+    const result = reduce(state, {
+      type: 'UPDATE_ACTIVE_CARDS',
+      updater: prev => {
+        const next = [...prev] as any;
+        next[0] = newcomer;
+        return next;
+      },
+    });
+
+    expect(isMine((result.state.activeCards as any[])[0])).toBe(true);
+    const stack0 = result.state.activeCardStacks[0] ?? [];
+    expect(stack0.length).toBe(2);
+    // 替换进来的 newcomer + 第一枚地雷在 stack 里（按 spawn 顺序）
+    expect(stack0[0]?.id).toBe('m-newcomer');
+    expect(isMine(stack0[1] as any)).toBe(true);
+    // 但 dying monster 没被塞进 stack
+    expect(stack0.some(c => c?.id === 'm-replaced')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 7) Card definition assertions
 // ---------------------------------------------------------------------------
 

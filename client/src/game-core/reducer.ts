@@ -301,7 +301,20 @@ function postProcessActiveCards(
         const curr = state.activeCards[col];
         // Only fire when a defeated monster has just left this column.
         if (!prev || prev.type !== 'monster' || !prev.defeatProcessed) continue;
-        if (curr === prev) continue; // monster still in slot, animation phase
+        // 「monster 还在 slot 里」必须按 **id 语义** 判，而不是引用相等。
+        // 真实游戏里很多 reducer 会通过 `.map(c => ({ ...c, ... }))` 模式给
+        // 同一只 dying monster 的 slot 重新建一个 ref（如另一只怪 N 死亡触发
+        // wraithDeathHeal / wraithDeathHealSpread / Skeleton re-revive，这些
+        // 都会遍历 row 给所有非 N 的怪物建新对象——包括已经 defeatProcessed=true
+        // 但 removeCard setTimeout 还没清空 slot 的 M）。如果用引用相等，
+        // 这种 ref 重建会被误判为「monster 已离场」，spawn 把还在 slot 里的
+        // dying monster 压进 activeCardStacks[col]——后续 removeCard 的
+        // `findSlotIndexByCardId` 找不到 monster（已不在 slot），早返不再
+        // 派飞往坟场动画 / 不再 dispatch UPDATE_ACTIVE_CARDS，于是
+        // dying monster 永远卡在 stack 里，玩家看到「灰色死掉的怪物没去
+        // 坟场，而是被新生成的地雷压在了下面」的 bug。
+        // 用 id 比较才正确：「slot 还有同 id 的卡」⇒「monster 还在 slot」。
+        if (curr?.id === prev.id) continue; // monster still in slot, animation phase
 
         // Stack each mine on top in sequence: the latest mine becomes the
         // visible top; earlier mines (and any pre-existing occupant) sink
@@ -594,7 +607,7 @@ function postProcessAmuletAura(
 //   `duration - (playerTurnPausedAt - playerTurnStartedAt)` until all stuns
 //   clear.
 // - When the last stunned monster un-stuns / dies / leaves the row, the
-//   timer **resets to its full duration** (40s normal / 100s boss): we
+//   timer **resets to its full duration** (60s normal / 120s boss): we
 //   shift `playerTurnStartedAt = Date.now()` and clear `playerTurnPausedAt`.
 //   This was an explicit design choice — un-stunning gives the player a
 //   fresh window, not a resume from where the pause began.

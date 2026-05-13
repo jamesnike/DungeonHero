@@ -312,6 +312,14 @@ function isInputContinuation(action: GameAction): boolean {
     case 'DEQUEUE_MONSTER_REWARD':
     case 'BEGIN_DISCOVER':
     case 'RESOLVE_DISCOVER_SELECTION':
+    // BEGIN_GHOST_BLADE_EXILE — 顶层由 hook `triggerGhostBladeExile` 在
+    // `combat:ghostBladeExile` 事件回调里 dispatch（走 _processAction 直接
+    // reduce，绕过这条 gate）。但 ghost-blade 弹窗的 queueing 逻辑会在
+    // SET_GHOST_BLADE_EXILE_CARDS payload=null 关弹窗时 enqueue 下一条
+    // BEGIN_GHOST_BLADE_EXILE 来自动开队列里的下一个弹窗——这条 follow-up
+    // 必须能在 `phase: 'playerInput'` 下被 drain，否则队列会死锁、第二个
+    // 弹窗永远不会 pop 出来。参考 `pipeline-input-continuation.mdc`。
+    case 'BEGIN_GHOST_BLADE_EXILE':
     // Pending-action continuations (player chose a target / dismissed modal)
     case 'SET_PENDING_MAGIC':
     case 'SET_PENDING_POTION':

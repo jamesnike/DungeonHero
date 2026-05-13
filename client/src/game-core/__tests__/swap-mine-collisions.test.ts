@@ -613,6 +613,51 @@ describe('Wraith haunt — 地雷碰撞（active row shuffle）', () => {
     const mineSomewhere = (finalState.activeCards as (GameCardData | null)[]).some(c => c?.id === 'mine-WH-C');
     expect(mineSomewhere).toBe(true);
   });
+
+  // Regression: User-reported bug ("wraith 缠绕技能，也应该可以换 幽灵建筑 的位置")
+  //
+  // Repro scenario: wraith + 1 monster + 1 mine-on-top-of-mine stack.
+  // With seed 13, the historical single-retry sameOrder check returned identity
+  // both times → activeCards completely unchanged → 玩家看到「缠绕触发了但
+  // monster 和 mine 的位置完全没动」。
+  //
+  // Fixed by changing applyWraithHauntEffect to loop until non-identity
+  // (capped at MAX_SHUFFLE_RETRIES). With the fix, seed 13 now produces a
+  // genuine swap on the second attempt.
+  it('REGRESSION: wraith + monster + (mine over mine stack), seed 13 → 必须换位（之前 seed 13 会卡在 identity）', () => {
+    const wraith = makeMonster('m-wraith-seed13', 1, 1);
+    (wraith as any).lastWords = 'wraith-haunt-2';
+    const monster = makeMonster('m-other-seed13', 50, 1);
+    const topMine = makeMine('mine-top-seed13', 5);
+    const bottomMine = makeMine('mine-bot-seed13', 5);
+
+    const state = makeState({
+      activeCards: activeRowOf(wraith, monster, topMine, null, null),
+      activeCardStacks: { 2: [bottomMine] } as any,
+      rng: createRng(13),
+    });
+
+    const engine = new GameEngine(state);
+    engine.on('ui:monsterSkillFloat', ({ floatId }) => {
+      engine.dispatch({ type: 'RELEASE_MONSTER_SKILL_FLOAT', floatId });
+    });
+
+    engine.dispatch({ type: 'EXECUTE_LAST_WORDS', monsterId: 'm-wraith-seed13', lastWords: 'wraith-haunt-2' });
+
+    const finalState = engine.getState();
+    const after = finalState.activeCards as (GameCardData | null)[];
+
+    // 不变量：monster 与 topMine 必然换位（之前 seed 13 会停留在原位）。
+    // Monster 落到 slot 2（mine 原位）→ 触发 mine collision → topMine 被消耗
+    // → slot 1 变 null（topMine 在 shuffled 里所在的位置）。
+    expect(after[2]?.id).toBe('m-other-seed13');
+    expect(after[1]).toBeNull();
+    // 底层 bottomMine 留在 column 2 的 stack 里（swap 只动顶层卡，跟
+    // 命运挪移 / 乾坤挪移 的设计保持一致）。
+    expect((finalState.activeCardStacks as any)?.[2]?.[0]?.id).toBe('mine-bot-seed13');
+    // topMine 因为 monster 落到它原位而被触发 → 进坟场
+    expect(finalState.discardedCards.some(c => c.id === 'mine-top-seed13')).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

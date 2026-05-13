@@ -1708,10 +1708,6 @@ export default function GameBoard() {
   const discoverPotionCompletionRef = useRef<((payload: { banner: string }) => void) | null>(null);
   const deckJudgePeekCloseRef = useRef<(() => void) | null>(null);
   const ghostBladeExileResolverRef = useRef<(() => void) | null>(null);
-  /** ghost blade exile 弹窗的触发源（用于 banner / log 文案）。
-   * 武器路径写「虚灵刀」、护符路径写「灵魂吞噬」。listener 触发时存进来；
-   * handleGhostBladeExileConfirm 用完清空。 */
-  const ghostBladeExileSourceLabelRef = useRef<string>('');
   const daggerSelfDestructResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const [daggerSelfDestructPrompt, setDaggerSelfDestructPrompt] = useState<{ weaponName: string; remainingDurability: number } | null>(null);
   const selectedHeroSkillRef = useRef<string | null>(selectedHeroSkill);
@@ -4125,7 +4121,6 @@ export default function GameBoard() {
     clearAllBackpackHandFallbacks();
     setBackpackViewerOpen(false);
     ghostBladeExileResolverRef.current = null;
-    ghostBladeExileSourceLabelRef.current = '';
     monsterRewardQueuedInstanceIdsRef.current.clear();
     lastWaterfallSequenceRef.current = null;
     cardDraftPendingSkillRef.current = null;
@@ -4817,7 +4812,6 @@ export default function GameBoard() {
       ghostBladeExileResolverRef.current();
       ghostBladeExileResolverRef.current = null;
     }
-    ghostBladeExileSourceLabelRef.current = '';
     // Dagger self-destruct prompt is purely a hook-side awaiter (the side
     // effect that opened it lives in the snapshot we just discarded). If we
     // undo while the prompt is open, resolve the awaiter as "declined" and
@@ -6031,7 +6025,6 @@ export default function GameBoard() {
     graveyardDiscoverResolverRef,
     graveyardDiscoverDeliveryRef,
     ghostBladeExileResolverRef,
-    ghostBladeExileSourceLabelRef,
     discoverPotionCompletionRef,
     onNewCardGainedRef,
   };
@@ -8509,7 +8502,7 @@ export default function GameBoard() {
   ]);
 
   /**
-   * 40s 倒计时归零时调用：先关掉所有组件本地的 useState modal（这些不在引擎
+   * 倒计时归零时调用（60s 普通 / 120s boss）：先关掉所有组件本地的 useState modal（这些不在引擎
    * state 里，FORCE_END_HERO_TURN reducer 看不见），然后 dispatch 一条
    * `FORCE_END_HERO_TURN` 让引擎清掉所有 modal/pending interaction +
    * enqueue END_TURN。

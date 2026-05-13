@@ -115,11 +115,16 @@ describe('弃装重铸 (knight:discard-rebuild)', () => {
     expect(result.state.discoverModalOpen).toBe(true);
     expect(result.state.discoverOptions.length).toBeGreaterThan(0);
     expect(result.state.discoverSourceLabel).toBe('弃装重铸');
+    // Discovered cards land directly in hand (hand-first delivery, mirrors
+    // 「专属感召」 / 回炉重造). Both the immediate BEGIN_DISCOVER and queued
+    // entries must carry delivery: 'hand-first'.
+    expect(result.state.discoverDelivery).toBe('hand-first');
     // Second discover queued for after the first modal closes.
     expect(result.state.pendingClassDiscoverQueue).toHaveLength(1);
     expect(result.state.pendingClassDiscoverQueue[0]).toEqual({
       source: 'discard-rebuild',
       sourceLabel: '弃装重铸',
+      delivery: 'hand-first',
     });
     // Card consumed from hand (heads to recycle bag with delay 2).
     expect(result.state.handCards.find(c => c.id === card.id)).toBeUndefined();
@@ -199,10 +204,12 @@ describe('弃装重铸 (knight:discard-rebuild)', () => {
     // 2 acted slots → 2 discovers total (1 fires, 1 queued).
     expect(result.state.discoverModalOpen).toBe(true);
     expect(result.state.discoverSourceLabel).toBe('弃装重铸');
+    expect(result.state.discoverDelivery).toBe('hand-first');
     expect(result.state.pendingClassDiscoverQueue).toHaveLength(1);
     expect(result.state.pendingClassDiscoverQueue[0]).toEqual({
       source: 'discard-rebuild',
       sourceLabel: '弃装重铸',
+      delivery: 'hand-first',
     });
   });
 
@@ -285,6 +292,70 @@ describe('弃装重铸 (knight:discard-rebuild)', () => {
     });
     expect(after.state.discoverModalOpen).toBe(false);
     expect(after.enqueuedActions ?? []).toEqual([]);
+  });
+
+  // -------------------------------------------------------------------------
+  // hand-first delivery — end-to-end: discovered card lands directly in hand
+  // (mirrors 「专属感召」 / 回炉重造 UX). Both the immediate discover and the
+  // queued one drained on modal close must use the hand-first destination.
+  // -------------------------------------------------------------------------
+
+  it('HAND-FIRST E2E: chosen discover card lands in hand (not backpack), and queued discover also delivers hand-first', () => {
+    const card = makeCard('hf-e2e');
+    const w = makeWeapon('w-hf-1');
+    const s = makeShield('s-hf-1');
+    const c1 = makeClassCard('c-hf-1');
+    const c2 = makeClassCard('c-hf-2');
+    const c3 = makeClassCard('c-hf-3');
+    const c4 = makeClassCard('c-hf-4');
+    const c5 = makeClassCard('c-hf-5');
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: w as any,
+      equipmentSlot2: s as any,
+      classDeck: [c1, c2, c3, c4, c5],
+      backpackItems: [],
+    });
+
+    // Step 1: cast the spell. First discover modal opens, queue has 1 entry,
+    // both should be hand-first.
+    const afterCast = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect(afterCast.state.discoverModalOpen).toBe(true);
+    expect(afterCast.state.discoverDelivery).toBe('hand-first');
+    expect(afterCast.state.pendingClassDiscoverQueue).toHaveLength(1);
+    expect(afterCast.state.pendingClassDiscoverQueue[0].delivery).toBe('hand-first');
+
+    // Step 2: pick the first discover option. Cloned card should land in hand
+    // (hand has plenty of room; backpack should NOT receive it). The drain
+    // pops the queued discover, opening a second modal — also hand-first.
+    const firstOption = afterCast.state.discoverOptions[0];
+    const handBefore = afterCast.state.handCards.length;
+    const backpackBefore = afterCast.state.backpackItems.length;
+    const afterPick1 = drain(afterCast.state, [
+      { type: 'RESOLVE_DISCOVER_SELECTION', cardId: firstOption.id } as GameAction,
+    ]);
+    expect(afterPick1.state.handCards.length).toBe(handBefore + 1);
+    expect(afterPick1.state.backpackItems.length).toBe(backpackBefore);
+    // Newly added hand card matches the chosen option (cloned with fresh id,
+    // so match by name).
+    const newlyInHand = afterPick1.state.handCards[afterPick1.state.handCards.length - 1];
+    expect(newlyInHand.name).toBe(firstOption.name);
+    // Second discover popped from queue, also hand-first.
+    expect(afterPick1.state.discoverModalOpen).toBe(true);
+    expect(afterPick1.state.discoverDelivery).toBe('hand-first');
+    expect(afterPick1.state.pendingClassDiscoverQueue).toHaveLength(0);
+
+    // Step 3: pick the second discover. Card again lands in hand.
+    const secondOption = afterPick1.state.discoverOptions[0];
+    const handMid = afterPick1.state.handCards.length;
+    const backpackMid = afterPick1.state.backpackItems.length;
+    const afterPick2 = drain(afterPick1.state, [
+      { type: 'RESOLVE_DISCOVER_SELECTION', cardId: secondOption.id } as GameAction,
+    ]);
+    expect(afterPick2.state.handCards.length).toBe(handMid + 1);
+    expect(afterPick2.state.backpackItems.length).toBe(backpackMid);
+    expect(afterPick2.state.discoverModalOpen).toBe(false);
+    expect(afterPick2.state.pendingClassDiscoverQueue).toHaveLength(0);
   });
 
   // -------------------------------------------------------------------------

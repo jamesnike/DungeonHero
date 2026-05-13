@@ -260,7 +260,7 @@ describe('hero turn timer — FORCE_END_HERO_TURN reducer', () => {
 //
 // Bug: 净册涌泉 / 装备灵附 / 镜影摹形 etc. (interactive magic) put the source
 // card into `pendingMagicAction.card` and remove it from handCards. If the
-// 40s timer expired before the player resolved the modal, the old reducer
+// hero turn timer expired before the player resolved the modal, the old reducer
 // cleared `pendingMagicAction = null` without routing the card → 卡凭空消失
 // (违反 disposition router 不变量, per pipeline-input-continuation.mdc 的
 // "disposition router strand" 警告).
@@ -508,7 +508,7 @@ describe('hero turn timer — card-in-limbo rescue on FORCE_END_HERO_TURN', () =
 // when player turn begins after monster's turn.
 //
 // Bug report (Sun May 10 2026): "let monster attack first, after attack
-// reaches player turn, originally 40s but only 0s, then player turn auto-ends".
+// reaches player turn, originally 60s but only 0s, then player turn auto-ends".
 //
 // Scenario: hero ends turn → monster turn (attacks, blocked) → END monster
 // turn → APPLY_MONSTER_TURN_END_EFFECTS → START_TURN → hero turn begins.

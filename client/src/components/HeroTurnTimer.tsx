@@ -3,13 +3,13 @@ import { Hourglass, Pause } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallowGameState } from '@/hooks/useGameEngine';
 
-/** 英雄回合 40 秒 wall-clock 倒计时窗口（无 boss 战）。 */
-const HERO_TURN_DURATION_MS = 40_000;
+/** 英雄回合 60 秒 wall-clock 倒计时窗口（无 boss 战）。 */
+const HERO_TURN_DURATION_MS = 60_000;
 
 /** Boss 战时的英雄回合倒计时窗口（活跃行有 `bossPhase: true` 怪物时启用）。
  *  Boss 战决策更复杂（多血层 / 强 retaliation / 全场 buff），玩家需要更多
- *  时间布局，给 100 秒。 */
-const BOSS_HERO_TURN_DURATION_MS = 100_000;
+ *  时间布局，给 120 秒。 */
+const BOSS_HERO_TURN_DURATION_MS = 120_000;
 
 /** 倒计时进入「警告」态（红色脉冲）的剩余阈值。 */
 const LOW_TIME_WARNING_MS = 10_000;
