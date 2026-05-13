@@ -742,3 +742,148 @@ describe('registry introspection', () => {
     expect(getEquipmentDerivedRegistrySize('durability-loss')).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Section 9: isLastIteration + overclockExtra ctx fields
+// ---------------------------------------------------------------------------
+
+describe('runEquipmentDerivedHandlers — isLastIteration + overclockExtra', () => {
+  it('overclock=0 → only iteration is both first AND last; overclockExtra=0', () => {
+    const observed: Array<{ first: boolean; last: boolean; oc: number }> = [];
+    registerEquipmentDerivedHandler('attack', 'h', (ctx) => {
+      observed.push({
+        first: ctx.isFirstIteration,
+        last: ctx.isLastIteration,
+        oc: ctx.overclockExtra,
+      });
+      return { fired: true };
+    });
+
+    const state = makeState();
+    const ctx = makeAttackCtxBase(state);
+    runEquipmentDerivedHandlers('attack', ctx);
+
+    expect(observed).toEqual([{ first: true, last: true, oc: 0 }]);
+  });
+
+  it('overclock=2 → iter 0 first/notLast, iter 1 mid, iter 2 notFirst/last; overclockExtra=2', () => {
+    const observed: Array<{ first: boolean; last: boolean; oc: number }> = [];
+    registerEquipmentDerivedHandler('attack', 'h', (ctx) => {
+      observed.push({
+        first: ctx.isFirstIteration,
+        last: ctx.isLastIteration,
+        oc: ctx.overclockExtra,
+      });
+      return { fired: true };
+    });
+
+    const state = makeOverclockState(2);
+    const ctx = makeAttackCtxBase(state);
+    runEquipmentDerivedHandlers('attack', ctx);
+
+    expect(observed).toEqual([
+      { first: true, last: false, oc: 2 },
+      { first: false, last: false, oc: 2 },
+      { first: false, last: true, oc: 2 },
+    ]);
+  });
+
+  it('overclock=1 → iter 0 first/notLast, iter 1 notFirst/last (both edges in 2-iter run)', () => {
+    const observed: Array<{ first: boolean; last: boolean }> = [];
+    registerEquipmentDerivedHandler('attack', 'h', (ctx) => {
+      observed.push({ first: ctx.isFirstIteration, last: ctx.isLastIteration });
+      return { fired: true };
+    });
+
+    const state = makeOverclockState(1);
+    const ctx = makeAttackCtxBase(state);
+    runEquipmentDerivedHandlers('attack', ctx);
+
+    expect(observed).toEqual([
+      { first: true, last: false },
+      { first: false, last: true },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Section 10: contributedToOverclock — opt-out semantics
+// ---------------------------------------------------------------------------
+
+describe('runEquipmentDerivedHandlers — contributedToOverclock opt-out', () => {
+  it('handler returning contributedToOverclock:false on every iter suppresses surface side effect', () => {
+    registerEquipmentDerivedHandler('attack', 'opted-out', () => ({
+      fired: true,
+      contributedToOverclock: false,
+    }));
+
+    const state = makeOverclockState(2);
+    const ctx = makeAttackCtxBase(state);
+    runEquipmentDerivedHandlers('attack', ctx);
+
+    expect(ctx.sideEffects.filter(s => s.event === 'combat:equipOverclockTriggered'))
+      .toHaveLength(0);
+  });
+
+  it('handler that opts in on a later iter (rescue scenario) → side effect emitted', () => {
+    let callIdx = 0;
+    registerEquipmentDerivedHandler('attack', 'rescue', () => {
+      const i = callIdx++;
+      // First two iterations: did not contribute. Third iteration: contributed (rescue).
+      return { fired: true, contributedToOverclock: i === 2 };
+    });
+
+    const state = makeOverclockState(2); // 1 + 2 = 3 iterations
+    const ctx = makeAttackCtxBase(state);
+    runEquipmentDerivedHandlers('attack', ctx);
+
+    const overclockSides = ctx.sideEffects.filter(
+      s => s.event === 'combat:equipOverclockTriggered',
+    );
+    expect(overclockSides).toHaveLength(1);
+    expect(overclockSides[0].payload).toEqual({ surface: 'attack', count: 2 });
+  });
+
+  it('default (no contributedToOverclock field) behaves as `fired` — emits side effect', () => {
+    registerEquipmentDerivedHandler('attack', 'h', () => ({ fired: true }));
+
+    const state = makeOverclockState(1);
+    const ctx = makeAttackCtxBase(state);
+    runEquipmentDerivedHandlers('attack', ctx);
+
+    expect(ctx.sideEffects.filter(s => s.event === 'combat:equipOverclockTriggered'))
+      .toHaveLength(1);
+  });
+
+  it('mixed: handler A contributes, handler B does not → still emits (any-handler semantics)', () => {
+    registerEquipmentDerivedHandler('attack', 'A', () => ({
+      fired: true,
+      contributedToOverclock: true,
+    }));
+    registerEquipmentDerivedHandler('attack', 'B', () => ({
+      fired: true,
+      contributedToOverclock: false,
+    }));
+
+    const state = makeOverclockState(1);
+    const ctx = makeAttackCtxBase(state);
+    runEquipmentDerivedHandlers('attack', ctx);
+
+    expect(ctx.sideEffects.filter(s => s.event === 'combat:equipOverclockTriggered'))
+      .toHaveLength(1);
+  });
+
+  it('contributedToOverclock=true with overclock=0 → no side effect (overclock not active)', () => {
+    registerEquipmentDerivedHandler('attack', 'h', () => ({
+      fired: true,
+      contributedToOverclock: true,
+    }));
+
+    const state = makeState(); // no overclock
+    const ctx = makeAttackCtxBase(state);
+    runEquipmentDerivedHandlers('attack', ctx);
+
+    expect(ctx.sideEffects.filter(s => s.event === 'combat:equipOverclockTriggered'))
+      .toHaveLength(0);
+  });
+});

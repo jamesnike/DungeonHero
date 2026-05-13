@@ -1528,8 +1528,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 1,
   });
 
-  // 囊中锋意 (Perm 1)：选择一个装备栏（允许空槽），按 floor(背包牌数 / divisor) 加临时攻击。
-  // - divisor = 3 (Lv0) / 2 (Lv1)
+  // 囊中锋意 (Perm 1)：选择一个装备栏（允许空槽），按 floor(背包牌数 / divisor) × 2 加临时攻击。
+  // - divisor = 3 (Lv0) / 2 (Lv1)，每满 divisor 张牌 +2 临时攻击
   // - 这张卡从手牌打出 → 进回收袋（recycleDelay: 1），不经背包，
   //   所以 setup → resolve 中间 backpackItems.length 不会变化；
   //   Echo C 类（重读 state）和 A 类（× echoMultiplier）此处数值等价。
@@ -1541,10 +1541,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBladeStormImage,
     classCard: true,
-    description: '永久：选择一个装备栏，背包每 3 张牌 +1 临时攻击。',
-    shortDescription: '所选栏 +背包数÷3 临时攻击',
+    description: '永久：选择一个装备栏，背包每 3 张牌 +2 临时攻击。',
+    shortDescription: '所选栏 +背包数÷3×2 临时攻击',
     magicType: 'permanent',
-    magicEffect: '永久魔法：选择一个装备栏，背包每 3 张牌 +1 临时攻击。',
+    magicEffect: '永久魔法：选择一个装备栏，背包每 3 张牌 +2 临时攻击。',
     knightEffect: 'backpack-temp-attack',
     recycleDelay: 1,
     maxUpgradeLevel: 1,

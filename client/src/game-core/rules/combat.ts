@@ -42,6 +42,15 @@ import { generateMonsterRewardOptions, queueMonsterRewardPure } from '../monster
 import { hasPassiveSkillOrRelic } from '../hero';
 import type { MonsterSkillKey } from '../monsterSkillNames';
 import { equipOverclockExtraTriggers } from './equipment-overclock';
+// Equipment-derived registry: imported from `./registry` directly (NOT the
+// barrel) to avoid cyclic re-entry — handler modules in the barrel may import
+// from `combat.ts` indirectly via `equipment-effects.ts`.
+import {
+  runEquipmentDerivedHandlers,
+  type AttackCtx,
+  type BlockCtx,
+  type ShieldReflectCtx,
+} from '../card-schema/equipment-derived/registry';
 
 /**
  * Map a `lastWords` effect string to its monster-skill display key.
@@ -1786,8 +1795,12 @@ function reduceApplyShieldReflect(
 
   // 永恒护符·装备超频 aura (stackable)：盾反弹路径里的衍生效果（dragon retaliation /
   // boss retaliation）每层多触发一次；反弹伤害本身也乘 (1 + N)。
+  // The `combat:equipOverclockTriggered` side effect is emitted INLINE at the
+  // end (gated on `overclockExtraReflect > 0`), regardless of whether the
+  // shield-reflect registry handlers fire — because the core damage multiplier
+  // below is itself an overclock contribution. See the registry call site
+  // and `card-schema/equipment-derived/shield-reflect.ts` for the rationale.
   const overclockExtraReflect = equipOverclockExtraTriggers(state);
-  let overclockFiredHere = false;
 
   const activeCards = [...state.activeCards] as ActiveRowSlots;
   const idx = activeCards.findIndex(c => c?.id === action.monsterId);
@@ -1801,7 +1814,6 @@ function reduceApplyShieldReflect(
   // 链路的第二轮触发，不是「再格挡一次」）。最终走 damageMonsterWithLayerOverflow
   // 把 reflect 输出汇总即可。
   const damageTotal = action.damage * (1 + overclockExtraReflect);
-  if (overclockExtraReflect > 0) overclockFiredHere = true;
   const updated = damageMonsterWithLayerOverflow(monster, damageTotal);
   activeCards[idx] = updated;
   const layersAfter = updated.currentLayer ?? 0;
@@ -1898,49 +1910,47 @@ function reduceApplyShieldReflect(
       }
     }
 
-    // Dragon breath retaliation from reflect damage (enqueued as sub-action)
-    if (monster.dragonDamageRetaliation && monster.dragonDamageRetaliation > 0 && !monster.isStunned) {
-      enqueuedActions.push({
-        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
-        monsterId: action.monsterId,
-        skillKey: 'reflect:dragonBreath',
-      });
-      enqueuedActions.push({
-        type: 'APPLY_DRAGON_BREATH_RETALIATION',
-        monsterId: action.monsterId,
-        monsterName: monster.name,
-        damage: monster.dragonDamageRetaliation,
-      });
-      sideEffects.push({ event: 'combat:dragonBreathRetaliation', payload: { monsterId: action.monsterId, monsterName: monster.name, damage: monster.dragonDamageRetaliation } });
-      for (let i = 0; i < overclockExtraReflect; i++) {
-        enqueuedActions.push({
-          type: 'APPLY_DRAGON_BREATH_RETALIATION',
-          monsterId: action.monsterId,
-          monsterName: monster.name,
-          damage: monster.dragonDamageRetaliation,
-        });
-      }
-      if (overclockExtraReflect > 0) overclockFiredHere = true;
-    }
-
-    // Boss retaliation check
-    const retDmg = monster.bossRetaliationDamage ?? 0;
-    if (retDmg > 0 && !monster.isStunned) {
-      enqueuedActions.push({
-        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
-        monsterId: action.monsterId,
-        skillKey: 'reflect:bossRetaliation',
-      });
-      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: retDmg, source: 'combat' });
-      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 反噬：造成 ${retDmg} 点直接伤害！` } });
-      for (let i = 0; i < overclockExtraReflect; i++) {
-        enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: retDmg, source: 'combat' });
-      }
-      if (overclockExtraReflect > 0) overclockFiredHere = true;
-    }
+    // ---- Run shield-reflect registry handlers (dragon-breath + boss-retaliation) ----
+    //
+    // Both handlers gate on monster-trait fields and run 1+N times. Each
+    // iteration enqueues 1 follow-up action (APPLY_DRAGON_BREATH_RETALIATION
+    // or APPLY_DAMAGE); first iteration also pushes the float / log / side
+    // effect (one-shot UX cues).
+    //
+    // Both handlers return `contributedToOverclock: false` on purpose: the
+    // overclock side effect for this surface is emitted INLINE (below), gated
+    // on `overclockExtraReflect > 0` regardless of whether the handlers
+    // fire — because the core damage multiplier (`damageTotal = damage ×
+    // (1+N)`) is itself an overclock contribution that always fires when
+    // overclock is active. See `card-schema/equipment-derived/shield-reflect.ts`.
+    const shieldReflectSurfaceCtx: ShieldReflectCtx = {
+      monster,
+      damageBase: action.damage,
+      sourceName: action.sourceName,
+      layersBefore,
+    };
+    const shieldReflectRun = runEquipmentDerivedHandlers('shield-reflect', {
+      state,
+      // `slotItem` / `slotId` are not meaningful for this surface (the
+      // reflect's source slot is unknown — see shield-reflect.ts comment).
+      // Pass the monster as a sentinel; handlers MUST read traits from
+      // `surfaceCtx.monster` instead.
+      slotItem: monster,
+      slotId: 'equipmentSlot1',
+      patch,
+      sideEffects,
+      enqueuedActions,
+      rng,
+      surface: 'shield-reflect',
+      surfaceCtx: shieldReflectSurfaceCtx,
+    });
+    rng = shieldReflectRun.rng;
   }
 
-  if (overclockFiredHere) {
+  if (overclockExtraReflect > 0) {
+    // Always emit when overclock is active — preserves original UX where the
+    // notification fires on every reflect (the core `damageTotal × (1+N)`
+    // multiplier is an overclock contribution even if no handler fires).
     sideEffects.push({
       event: 'combat:equipOverclockTriggered',
       payload: { surface: 'shieldReflect', count: overclockExtraReflect },
@@ -2585,16 +2595,23 @@ function reducePerformHeroAttack(
   sideEffects.push({ event: 'combat:weaponSwing', payload: { slotId, delay: 0, echoes: 2 } });
 
   // --- Heal on attack ---
-  if ((slotItem as GameCardData).healOnAttack) {
-    enqueuedActions.push({ type: 'HEAL', amount: (slotItem as GameCardData).healOnAttack!, source: 'heal-on-attack' });
-    sideEffects.push({
-      event: 'log:entry',
-      payload: { type: 'heal', message: `${slotItem.name} 攻击恢复了 ${(slotItem as GameCardData).healOnAttack} 点生命` },
-    });
-    for (let i = 0; i < overclockExtra; i++) {
-      enqueuedActions.push({ type: 'HEAL', amount: (slotItem as GameCardData).healOnAttack!, source: 'heal-on-attack' });
-    }
-    if (overclockExtra > 0) overclockFiredThisAttack = true;
+  // Migrated to registry (PR-4a). Handler runs 1+N times, enqueues 1 HEAL per
+  // iteration; first iteration also pushes the log. See attack-basic.ts.
+  // Call ordering preserved: HEAL must enqueue BEFORE subsequent damage actions.
+  {
+    const preDamageSurfaceCtx: AttackCtx = {
+      targetMonster, workingMonster: targetMonster,
+      monsterDefeated: false, finalDamage, baseDamage,
+      isCrit, overkillHitCount: 0, weaponDestroyed: false,
+      isMonsterEquip, isBuildingTarget, attackEffectiveLifesteal: 0,
+      amuletEffects: ae,
+    };
+    const r = runEquipmentDerivedHandlers('attack', {
+      state, slotItem: slotItem as GameCardData, slotId, patch, sideEffects, enqueuedActions, rng,
+      surface: 'attack', surfaceCtx: preDamageSurfaceCtx,
+    }, { only: ['heal-on-attack'] });
+    rng = r.rng;
+    if (r.firedHandlerCount > 0 && overclockExtra > 0) overclockFiredThisAttack = true;
   }
 
   // --- Draw on attack ---
@@ -2604,17 +2621,21 @@ function reducePerformHeroAttack(
   //   - Fork 攻击：每次 PERFORM_HERO_ATTACK 都重新跑这一段，自动 chain re-trigger。
   //   - 装备超频：overclockExtra 复用同一计数，与 healOnAttack 共享同一个
   //     overclockFiredThisAttack 计费标记。
-  if ((slotItem as GameCardData).drawOnAttack) {
-    const drawCount = (slotItem as GameCardData).drawOnAttack!;
-    enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
-    sideEffects.push({
-      event: 'log:entry',
-      payload: { type: 'magic', message: `${slotItem.name} 攻击：从背包抽 ${drawCount} 张牌！` },
-    });
-    for (let i = 0; i < overclockExtra; i++) {
-      enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
-    }
-    if (overclockExtra > 0) overclockFiredThisAttack = true;
+  // Migrated to registry (PR-4a). See attack-basic.ts.
+  {
+    const preDamageSurfaceCtx: AttackCtx = {
+      targetMonster, workingMonster: targetMonster,
+      monsterDefeated: false, finalDamage, baseDamage,
+      isCrit, overkillHitCount: 0, weaponDestroyed: false,
+      isMonsterEquip, isBuildingTarget, attackEffectiveLifesteal: 0,
+      amuletEffects: ae,
+    };
+    const r = runEquipmentDerivedHandlers('attack', {
+      state, slotItem: slotItem as GameCardData, slotId, patch, sideEffects, enqueuedActions, rng,
+      surface: 'attack', surfaceCtx: preDamageSurfaceCtx,
+    }, { only: ['draw-on-attack'] });
+    rng = r.rng;
+    if (r.firedHandlerCount > 0 && overclockExtra > 0) overclockFiredThisAttack = true;
   }
 
   // --- Debuff all monster attack ---
@@ -2680,29 +2701,23 @@ function reducePerformHeroAttack(
     sideEffects.push({ event: 'combat:monsterBleed', payload: { monsterId: targetMonsterId, delay: 0 } });
 
     // Boss retaliation
-    if (!isBuildingTarget && workingMonster.bossRetaliationDamage && workingMonster.bossRetaliationDamage > 0 && !workingMonster.isStunned) {
-      enqueuedActions.push({
-        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
-        monsterId: targetMonsterId,
-        skillKey: 'reflect:bossRetaliation',
-      });
-      enqueuedActions.push({
-        type: 'APPLY_DAMAGE',
-        amount: workingMonster.bossRetaliationDamage,
-        source: 'combat',
-      });
-      sideEffects.push({
-        event: 'log:entry',
-        payload: { type: 'combat', message: `${targetMonster.name} 反噬：造成 ${workingMonster.bossRetaliationDamage} 点直接伤害！` },
-      });
-      for (let i = 0; i < overclockExtra; i++) {
-        enqueuedActions.push({
-          type: 'APPLY_DAMAGE',
-          amount: workingMonster.bossRetaliationDamage,
-          source: 'combat',
-        });
-      }
-      if (overclockExtra > 0) overclockFiredThisAttack = true;
+    // Migrated to registry (PR-4a). Handler reads workingMonster.bossRetaliationDamage
+    // (post-damage view) and enqueues 1 APPLY_DAMAGE per iteration; first iter
+    // pushes the float + log. See attack-basic.ts.
+    {
+      const onHitSurfaceCtx: AttackCtx = {
+        targetMonster, workingMonster,
+        monsterDefeated: false, finalDamage, baseDamage,
+        isCrit, overkillHitCount: 0, weaponDestroyed: false,
+        isMonsterEquip, isBuildingTarget, attackEffectiveLifesteal: 0,
+        amuletEffects: ae,
+      };
+      const r = runEquipmentDerivedHandlers('attack', {
+        state, slotItem: slotItem as GameCardData, slotId, patch, sideEffects, enqueuedActions, rng,
+        surface: 'attack', surfaceCtx: onHitSurfaceCtx,
+      }, { only: ['boss-retaliation-attack'] });
+      rng = r.rng;
+      if (r.firedHandlerCount > 0 && overclockExtra > 0) overclockFiredThisAttack = true;
     }
 
     // Overkill — compute first, log unconditionally so the player can see it
@@ -2853,21 +2868,41 @@ function reducePerformHeroAttack(
   }
 
   // --- Overkill effects ---
-  if (overkillHitCount > 0 && attackEffectiveLifesteal > 0) {
-    enqueuedActions.push({ type: 'HEAL', amount: attackEffectiveLifesteal * overkillHitCount, source: 'overkill-lifesteal' });
-    sideEffects.push({ event: 'log:entry', payload: { type: 'heal', message: `超杀吸血：恢复 ${attackEffectiveLifesteal * overkillHitCount} 生命` } });
-    for (let i = 0; i < overclockExtra; i++) {
-      enqueuedActions.push({ type: 'HEAL', amount: attackEffectiveLifesteal * overkillHitCount, source: 'overkill-lifesteal' });
-    }
-    if (overclockExtra > 0) overclockFiredThisAttack = true;
+  // overkill-lifesteal — migrated to registry (PR-4b). See attack-overkill.ts.
+  // Each iter enqueues 1 HEAL of `lifesteal × hitCount`; first iter pushes log.
+  // NOTE: `weaponDestroyed: false` because durability tick hasn't run yet at
+  // this point in the reducer (the `let weaponDestroyed = false` declaration
+  // is later, around line 3100).
+  {
+    const overkillSurfaceCtx: AttackCtx = {
+      targetMonster, workingMonster,
+      monsterDefeated, finalDamage, baseDamage,
+      isCrit, overkillHitCount, weaponDestroyed: false,
+      isMonsterEquip, isBuildingTarget, attackEffectiveLifesteal,
+      amuletEffects: ae,
+    };
+    const r = runEquipmentDerivedHandlers('attack', {
+      state, slotItem: slotItem as GameCardData, slotId, patch, sideEffects, enqueuedActions, rng,
+      surface: 'attack', surfaceCtx: overkillSurfaceCtx,
+    }, { only: ['overkill-lifesteal'] });
+    rng = r.rng;
+    if (r.firedHandlerCount > 0 && overclockExtra > 0) overclockFiredThisAttack = true;
   }
-  if (overkillHitCount > 0 && (slotItem as GameCardData).overkillDraw) {
-    const drawCount = (slotItem as GameCardData).overkillDraw! * overkillHitCount;
-    sideEffects.push({ event: 'equipment:drawFromBackpack', payload: { count: drawCount, source: 'overkill' } });
-    for (let i = 0; i < overclockExtra; i++) {
-      sideEffects.push({ event: 'equipment:drawFromBackpack', payload: { count: drawCount, source: 'overkill' } });
-    }
-    if (overclockExtra > 0) overclockFiredThisAttack = true;
+  // overkill-draw — migrated to registry (PR-4b). Pure side-effect emit.
+  {
+    const overkillSurfaceCtx: AttackCtx = {
+      targetMonster, workingMonster,
+      monsterDefeated, finalDamage, baseDamage,
+      isCrit, overkillHitCount, weaponDestroyed: false,
+      isMonsterEquip, isBuildingTarget, attackEffectiveLifesteal,
+      amuletEffects: ae,
+    };
+    const r = runEquipmentDerivedHandlers('attack', {
+      state, slotItem: slotItem as GameCardData, slotId, patch, sideEffects, enqueuedActions, rng,
+      surface: 'attack', surfaceCtx: overkillSurfaceCtx,
+    }, { only: ['overkill-draw'] });
+    rng = r.rng;
+    if (r.firedHandlerCount > 0 && overclockExtra > 0) overclockFiredThisAttack = true;
   }
   if (overkillHitCount > 0 && (slotItem as GameCardData).overkillRecycleToHand) {
     const recycleCount = (slotItem as GameCardData).overkillRecycleToHand! * overkillHitCount;
@@ -2918,17 +2953,22 @@ function reducePerformHeroAttack(
       sideEffects.push({ event: 'equipment:drawFromRecycleBag', payload: { count: toHand.length } });
     }
   }
-  if (overkillHitCount > 0 && (slotItem as GameCardData).overkillAmplifyMissile) {
-    const amplifyAmount = (slotItem as GameCardData).overkillAmplifyMissile! * overkillHitCount;
-    enqueuedActions.push({ type: 'AMPLIFY_CARDS_BY_NAME', cardName: '魔弹', amount: amplifyAmount, source: slotItem.name });
-    sideEffects.push({
-      event: 'log:entry',
-      payload: { type: 'equip', message: `${slotItem.name} 超杀：所有「魔弹」+${amplifyAmount} 增幅` },
-    });
-    for (let i = 0; i < overclockExtra; i++) {
-      enqueuedActions.push({ type: 'AMPLIFY_CARDS_BY_NAME', cardName: '魔弹', amount: amplifyAmount, source: slotItem.name });
-    }
-    if (overclockExtra > 0) overclockFiredThisAttack = true;
+  // overkill-amplify-missile — migrated to registry (PR-4b). See attack-overkill.ts.
+  // Same `weaponDestroyed: false` rationale as overkill-lifesteal above.
+  {
+    const overkillSurfaceCtx: AttackCtx = {
+      targetMonster, workingMonster,
+      monsterDefeated, finalDamage, baseDamage,
+      isCrit, overkillHitCount, weaponDestroyed: false,
+      isMonsterEquip, isBuildingTarget, attackEffectiveLifesteal,
+      amuletEffects: ae,
+    };
+    const r = runEquipmentDerivedHandlers('attack', {
+      state, slotItem: slotItem as GameCardData, slotId, patch, sideEffects, enqueuedActions, rng,
+      surface: 'attack', surfaceCtx: overkillSurfaceCtx,
+    }, { only: ['overkill-amplify-missile'] });
+    rng = r.rng;
+    if (r.firedHandlerCount > 0 && overclockExtra > 0) overclockFiredThisAttack = true;
   }
 
   // --- Amplify 魔弹 + spawn N bolts (魔弹连弩, overkill-gated) ---
@@ -3201,16 +3241,23 @@ function reducePerformHeroAttack(
       payload: { type: 'equip', message: `${slotItem.name} 永久伤害 +${knightSlotItem.weaponBonus}（该装备栏）` },
     });
   }
-  if (monsterDefeated && knightSlotItem.healOnKill) {
-    enqueuedActions.push({ type: 'HEAL', amount: knightSlotItem.healOnKill, source: 'heal-on-kill' });
-    sideEffects.push({
-      event: 'log:entry',
-      payload: { type: 'heal', message: `${slotItem.name} 击杀回复 ${knightSlotItem.healOnKill} 点生命` },
-    });
-    for (let i = 0; i < overclockExtra; i++) {
-      enqueuedActions.push({ type: 'HEAL', amount: knightSlotItem.healOnKill, source: 'heal-on-kill' });
-    }
-    if (overclockExtra > 0) overclockFiredThisAttack = true;
+  // Heal-on-kill — migrated to registry (PR-4a). Handler enqueues 1 HEAL per
+  // iteration; first iter pushes log. Gates on surfaceCtx.monsterDefeated.
+  // See attack-basic.ts.
+  {
+    const postKillSurfaceCtx: AttackCtx = {
+      targetMonster, workingMonster,
+      monsterDefeated, finalDamage, baseDamage,
+      isCrit, overkillHitCount, weaponDestroyed,
+      isMonsterEquip, isBuildingTarget, attackEffectiveLifesteal,
+      amuletEffects: ae,
+    };
+    const r = runEquipmentDerivedHandlers('attack', {
+      state, slotItem: slotItem as GameCardData, slotId, patch, sideEffects, enqueuedActions, rng,
+      surface: 'attack', surfaceCtx: postKillSurfaceCtx,
+    }, { only: ['heal-on-kill'] });
+    rng = r.rng;
+    if (r.firedHandlerCount > 0 && overclockExtra > 0) overclockFiredThisAttack = true;
   }
   if (monsterDefeated && (slotItem as GameCardData).restoreDurabilityOnKill && slotItem.maxDurability) {
     patch[slotId] = { ...(patch[slotId] ?? slotItem), durability: slotItem.maxDurability } as EquipmentItem;
@@ -3220,24 +3267,23 @@ function reducePerformHeroAttack(
     });
     sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 耐久度回满！` } });
   }
-  if (monsterDefeated && (slotItem as GameCardData).killGoldScaling) {
-    const goldAmount = (slotItem as GameCardData).killGoldCounter ?? 2;
-    patch.gold = (patch.gold ?? state.gold ?? 0) + goldAmount;
-    sideEffects.push({
-      event: 'log:entry',
-      payload: { type: 'equip', message: `${slotItem.name} 赏金：击杀获得 ${goldAmount} 金币` },
-    });
-    if (!weaponDestroyed) {
-      const currentItem = patch[slotId] ?? slotItem;
-      patch[slotId] = {
-        ...currentItem,
-        killGoldCounter: goldAmount + 1,
-      } as EquipmentItem;
-    }
-    if (overclockExtra > 0) {
-      patch.gold = (patch.gold ?? state.gold ?? 0) + goldAmount * overclockExtra;
-      overclockFiredThisAttack = true;
-    }
+  // Kill-gold-scaling — migrated to registry (PR-4a). Each iter adds goldAmount;
+  // first iter also writes counter +1 and pushes log. Net: gold × (1+N), counter
+  // +1 once, log once. See attack-basic.ts.
+  {
+    const postKillSurfaceCtx: AttackCtx = {
+      targetMonster, workingMonster,
+      monsterDefeated, finalDamage, baseDamage,
+      isCrit, overkillHitCount, weaponDestroyed,
+      isMonsterEquip, isBuildingTarget, attackEffectiveLifesteal,
+      amuletEffects: ae,
+    };
+    const r = runEquipmentDerivedHandlers('attack', {
+      state, slotItem: slotItem as GameCardData, slotId, patch, sideEffects, enqueuedActions, rng,
+      surface: 'attack', surfaceCtx: postKillSurfaceCtx,
+    }, { only: ['kill-gold-scaling'] });
+    rng = r.rng;
+    if (r.firedHandlerCount > 0 && overclockExtra > 0) overclockFiredThisAttack = true;
   }
 
   // --- Minion growth ---
@@ -3306,31 +3352,22 @@ function reducePerformHeroAttack(
       // combat:dragonBreathRetaliation side effect is consumed by
       // useCombatActions for the orb projectile + bleed visual only — without
       // the enqueued APPLY action the hero takes no damage at all.
-      if (targetMonster.dragonDamageRetaliation && targetMonster.dragonDamageRetaliation > 0) {
-        enqueuedActions.push({
-          type: 'TRIGGER_MONSTER_SKILL_FLOAT',
-          monsterId: targetMonsterId,
-          skillKey: 'reflect:dragonBreath',
-        });
-        enqueuedActions.push({
-          type: 'APPLY_DRAGON_BREATH_RETALIATION',
-          monsterId: targetMonsterId,
-          monsterName: targetMonster.name,
-          damage: targetMonster.dragonDamageRetaliation,
-        });
-        sideEffects.push({
-          event: 'combat:dragonBreathRetaliation',
-          payload: { monsterId: targetMonsterId, monsterName: targetMonster.name, damage: targetMonster.dragonDamageRetaliation },
-        });
-        for (let i = 0; i < overclockExtra; i++) {
-          enqueuedActions.push({
-            type: 'APPLY_DRAGON_BREATH_RETALIATION',
-            monsterId: targetMonsterId,
-            monsterName: targetMonster.name,
-            damage: targetMonster.dragonDamageRetaliation,
-          });
-        }
-        if (overclockExtra > 0) overclockFiredThisAttack = true;
+      // Migrated to registry (PR-4a). Handler enqueues 1 APPLY per iteration;
+      // first iter pushes float + side effect. See attack-basic.ts.
+      {
+        const dragonAttackSurfaceCtx: AttackCtx = {
+          targetMonster, workingMonster,
+          monsterDefeated, finalDamage, baseDamage,
+          isCrit, overkillHitCount, weaponDestroyed,
+          isMonsterEquip, isBuildingTarget, attackEffectiveLifesteal,
+          amuletEffects: ae,
+        };
+        const r = runEquipmentDerivedHandlers('attack', {
+          state, slotItem: slotItem as GameCardData, slotId, patch, sideEffects, enqueuedActions, rng,
+          surface: 'attack', surfaceCtx: dragonAttackSurfaceCtx,
+        }, { only: ['dragon-breath-retaliation-attack'] });
+        rng = r.rng;
+        if (r.firedHandlerCount > 0 && overclockExtra > 0) overclockFiredThisAttack = true;
       }
 
       // Dragon bleed destroy equipment
@@ -3511,44 +3548,44 @@ function reducePerformHeroAttack(
   }
 
   // --- Post-attack hand recycle ---
-  if ((slotItem as GameCardData).postAttackHandRecycle) {
-    sideEffects.push({ event: 'combat:postAttackHandRecycle', payload: { itemName: slotItem.name } });
-    for (let i = 0; i < overclockExtra; i++) {
-      sideEffects.push({ event: 'combat:postAttackHandRecycle', payload: { itemName: slotItem.name } });
-    }
-    if (overclockExtra > 0) overclockFiredThisAttack = true;
+  // Migrated to registry (PR-4a). Handler pushes 1 side effect per iteration.
+  // See attack-basic.ts.
+  {
+    const postAttackSurfaceCtx: AttackCtx = {
+      targetMonster, workingMonster,
+      monsterDefeated, finalDamage, baseDamage,
+      isCrit, overkillHitCount, weaponDestroyed,
+      isMonsterEquip, isBuildingTarget, attackEffectiveLifesteal,
+      amuletEffects: ae,
+    };
+    const r = runEquipmentDerivedHandlers('attack', {
+      state, slotItem: slotItem as GameCardData, slotId, patch, sideEffects, enqueuedActions, rng,
+      surface: 'attack', surfaceCtx: postAttackSurfaceCtx,
+    }, { only: ['post-attack-hand-recycle'] });
+    rng = r.rng;
+    if (r.firedHandlerCount > 0 && overclockExtra > 0) overclockFiredThisAttack = true;
   }
 
   // --- Post-attack spell damage ---
-  if ((slotItem as GameCardData).postAttackSpellDamage) {
-    const boardMonsters = flattenActiveRowSlots((patch.activeCards ?? state.activeCards) as ActiveRowSlots).filter(
-      (c): c is GameCardData => isDamageableTarget(c),
-    );
-    if (boardMonsters.length > 0) {
-      let target: GameCardData;
-      [target, rng] = pickRandom(boardMonsters, rng);
-      const spellDmg = Math.max(0, (slotItem as GameCardData).postAttackSpellDamage! + (state.permanentSpellDamageBonus ?? 0));
-      sideEffects.push({ event: 'combat:arcaneBladeSpell', payload: { slotId, targetId: target.id } });
-      ensureMonsterEngagedLocal(state, target, enqueuedActions);
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: spellDmg, source: 'arcane-blade-spell', isSpellDamage: true });
-      sideEffects.push({
-        event: 'log:entry',
-        payload: { type: 'combat', message: `${slotItem.name} 附魔：对 ${target.name} 造成 ${spellDmg} 点法术伤害` },
-      });
-      for (let i = 0; i < overclockExtra; i++) {
-        // 装备超频 ×N：对**当前**随机目标再触发一次法术伤害（每层独立挑目标，
-        // 若先前目标早死则在池子里换一只存活的）。
-        let target2: GameCardData = target;
-        const survivors = flattenActiveRowSlots((patch.activeCards ?? state.activeCards) as ActiveRowSlots)
-          .filter((c): c is GameCardData => isDamageableTarget(c) && c.id !== target.id);
-        if (survivors.length > 0 && (target.currentLayer ?? target.fury ?? 1) <= 0) {
-          [target2, rng] = pickRandom(survivors, rng);
-        }
-        ensureMonsterEngagedLocal(state, target2, enqueuedActions);
-        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target2.id, damage: spellDmg, source: 'arcane-blade-spell', isSpellDamage: true });
-      }
-      if (overclockExtra > 0) overclockFiredThisAttack = true;
-    }
+  // Migrated to registry (PR-4b). Iter 1 picks random target (RNG-consuming),
+  // ensures engagement, enqueues DEAL_DAMAGE + side effect + log; iter 2..N
+  // re-targets the SAME cached monster (no re-pick — original's "if first
+  // target died, re-pick from survivors" was dead code in practice). See
+  // attack-overkill.ts.
+  {
+    const spellSurfaceCtx: AttackCtx = {
+      targetMonster, workingMonster,
+      monsterDefeated, finalDamage, baseDamage,
+      isCrit, overkillHitCount, weaponDestroyed,
+      isMonsterEquip, isBuildingTarget, attackEffectiveLifesteal,
+      amuletEffects: ae,
+    };
+    const r = runEquipmentDerivedHandlers('attack', {
+      state, slotItem: slotItem as GameCardData, slotId, patch, sideEffects, enqueuedActions, rng,
+      surface: 'attack', surfaceCtx: spellSurfaceCtx,
+    }, { only: ['post-attack-spell-damage'] });
+    rng = r.rng;
+    if (r.firedHandlerCount > 0 && overclockExtra > 0) overclockFiredThisAttack = true;
   }
 
   // --- Elite double attack dice ---
@@ -3814,125 +3851,42 @@ function reduceResolveBlock(
       // case. The `=== 0` form is correct for both fresh and spent state.
       const isPerfectBlock = remainingDamage === 0;
 
-      // Dual guard: perfect block bonus — N amulets each grant +1 permanent armor.
-      if (isPerfectBlock && ae.dualGuardCount > 0) {
-        const armorGain = ae.dualGuardCount;
-        const overclockBonus = armorGain * overclockExtraBlock;
-        const totalArmorGain = armorGain + overclockBonus;
-        const bonuses = { ...state.equipmentSlotBonuses };
-        bonuses[blockSlotId] = { ...bonuses[blockSlotId], shield: bonuses[blockSlotId].shield + totalArmorGain };
-        patch.equipmentSlotBonuses = bonuses as EquipmentSlotBonusState;
-        applySlotArmorBonusDelta(state, blockSlotId, totalArmorGain, patch);
-        sideEffects.push({
-          event: 'log:entry',
-          payload: { type: 'combat', message: `完美格挡！双守护圣盾使该栏永久护甲 +${totalArmorGain}` },
+      // PR-5: 5 perfect-block / block-grant / dragon-breath effects migrated
+      // to the equipment-derived registry (`block.ts`). One `runEquipment-
+      // DerivedHandlers('block', ...)` call dispatches all of them in
+      // registration order. Handlers gate on `surfaceCtx.isPerfectBlock` /
+      // slot-specific fields and return `contributedToOverclock: false` —
+      // `overclockFiredThisBlock` flag below is the single source for the
+      // `combat:equipOverclockTriggered` end-of-reducer emit.
+      {
+        const blockSurfaceCtx: BlockCtx = {
+          monster,
+          blockSlotId,
+          isPerfectBlock,
+          isFullBlockShield,
+          isMonsterEquipShield,
+          storedCap,
+          pendingBlockAttackValue: pendingBlock.attackValue,
+          amuletEffects: ae,
+          reflectDmg: 0, // shield-reflect-on-block is dispatched at later callsites; gated to 0 here
+          reflectSourceName: '',
+          reflectBlockSlotId: null,
+        };
+        const r = runEquipmentDerivedHandlers('block', {
+          state, slotItem: slotItem as GameCardData, slotId: blockSlotId,
+          patch, sideEffects, enqueuedActions, rng,
+          surface: 'block', surfaceCtx: blockSurfaceCtx,
+        }, {
+          only: [
+            'dual-guard-armor',
+            'perfect-block-max-hp-gain',
+            'perfect-block-spawn-missiles',
+            'block-grant-temp-armor-to-other',
+            'dragon-breath-shield-retaliation',
+          ],
         });
-        sideEffects.push({ event: 'ui:banner', payload: { text: `完美格挡！该装备栏永久护甲 +${totalArmorGain}！` } });
-        if (overclockExtraBlock > 0) overclockFiredThisBlock = true;
-      }
-
-      // 砺心之盾 — perfect-block max-HP gain: on perfect block, permanently
-      // raise hero maxHp by N. Cap-only — does NOT heal current hp (mirrors
-      // 附魔祭坛「遗言：生命值上限+4」 semantics in equipment-effects.ts).
-      // Stacks every perfect block, no per-card cap.
-      const perfectBlockMaxHpGain = (slotItem as GameCardData).shieldPerfectBlockMaxHpGain ?? 0;
-      if (isPerfectBlock && perfectBlockMaxHpGain > 0) {
-        const totalGain = perfectBlockMaxHpGain * (1 + overclockExtraBlock);
-        patch.permanentMaxHpBonus = (patch.permanentMaxHpBonus ?? state.permanentMaxHpBonus ?? 0) + totalGain;
-        sideEffects.push({
-          event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 完美格挡：永久生命值上限 +${totalGain}！` },
-        });
-        sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 完美格挡！生命值上限 +${totalGain}！` } });
-        if (overclockExtraBlock > 0) overclockFiredThisBlock = true;
-      }
-
-      // 弹幕护盾 — perfect-block missile spawn: when this shield achieves perfect
-      // block, spawn N 魔弹 directly into hand. Hand-full overflow is silently
-      // dropped (per design). 走 createMagicBoltCard + applyAmplifyOnCreate
-      // 与魔弹连弩 / 魔法飞弹 / 弹幕之符 一致，让新魔弹继承当前 amplifiedCardBonus['魔弹']。
-      const perfectBlockSpawnBase = (slotItem as GameCardData).perfectBlockSpawnMissiles ?? 0;
-      const perfectBlockSpawnCount = perfectBlockSpawnBase > 0
-        ? perfectBlockSpawnBase * (1 + overclockExtraBlock)
-        : perfectBlockSpawnBase;
-      if (isPerfectBlock && perfectBlockSpawnCount > 0) {
-        if (overclockExtraBlock > 0 && perfectBlockSpawnBase > 0) overclockFiredThisBlock = true;
-        const handLimit = HAND_LIMIT + (state.handLimitBonus ?? 0);
-        const currentHand = (patch.handCards ?? state.handCards) as GameCardData[];
-        const handRoom = Math.max(0, handLimit - currentHand.length);
-        const actualCount = Math.min(perfectBlockSpawnCount, handRoom);
-        if (actualCount > 0) {
-          const bolts: GameCardData[] = [];
-          for (let i = 0; i < actualCount; i++) {
-            const [rawBolt, nextRng] = createMagicBoltCard(rng);
-            rng = nextRng;
-            bolts.push(applyAmplifyOnCreate(rawBolt, state.amplifiedCardBonus));
-          }
-          patch.rng = rng;
-          patch.handCards = [...currentHand, ...bolts];
-          sideEffects.push({
-            event: 'log:entry',
-            payload: {
-              type: 'equip',
-              message: actualCount === perfectBlockSpawnCount
-                ? `${slotItem.name} 完美格挡：获得 ${actualCount} 张「魔弹」加入手牌`
-                : `${slotItem.name} 完美格挡：获得 ${actualCount} 张「魔弹」加入手牌（手牌已满，少入 ${perfectBlockSpawnCount - actualCount} 张）`,
-            },
-          });
-          sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 完美格挡！获得 ${actualCount} 张「魔弹」` } });
-        } else {
-          sideEffects.push({
-            event: 'log:entry',
-            payload: { type: 'equip', message: `${slotItem.name} 完美格挡：手牌已满，「魔弹」未生成` },
-          });
-        }
-      }
-
-      // Block grant temp armor to other
-      if ((slotItem as GameCardData).blockGrantTempArmorToOther) {
-        const otherSlot: EquipmentSlotId = blockSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
-        // Single-counter armor model: monster equip grants its non-temp cap
-        // (base hp + perm), shield grants its full cap (base + perm + temp).
-        // Floor on FINAL sum so negative perm reduces grant rather than being
-        // dropped individually (consistent with the rest of the model).
-        const grantBase = isMonsterEquipShield
-          ? Math.max(0, ((slotItem as GameCardData).hp ?? slotItem.value) + slotShieldBonus)
-          : storedCap;
-        const grantAmount = grantBase * (1 + overclockExtraBlock);
-        patch.slotTempArmor = { ...(state.slotTempArmor ?? {}), [otherSlot]: ((state.slotTempArmor ?? {})[otherSlot] ?? 0) + grantAmount };
-        applySlotArmorBonusDelta(state, otherSlot, grantAmount, patch);
-        const otherSlotLabel = otherSlot === 'equipmentSlot1' ? '左' : '右';
-        sideEffects.push({
-          event: 'log:entry',
-          payload: { type: 'combat', message: `${slotItem.name} 守望者链接：${otherSlotLabel}装备栏临时护甲 +${grantAmount}！` },
-        });
-        sideEffects.push({ event: 'ui:banner', payload: { text: `守望者链接！${otherSlotLabel}装备栏临时护甲 +${grantAmount}！` } });
-        checkPersuadeOnTempAttack(state, patch, sideEffects);
-        if (overclockExtraBlock > 0) overclockFiredThisBlock = true;
-      }
-
-      // Dragon damage retaliation from shield
-      if (isMonsterEquipShield && (slotItem as GameCardData).dragonDamageRetaliation && (slotItem as GameCardData).dragonDamageRetaliation! > 0) {
-        const boardMonsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(
-          (c): c is GameCardData => Boolean(c && c.type === 'monster'),
-        );
-        if (boardMonsters.length > 0) {
-          let randomTarget: GameCardData;
-          [randomTarget, rng] = pickRandom(boardMonsters, rng);
-          sideEffects.push({ event: 'combat:shieldReflect', payload: { slotId: blockSlotId, targetId: randomTarget.id } });
-          ensureMonsterEngagedLocal(state, randomTarget, enqueuedActions);
-          enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: randomTarget.id, damage: 2, source: 'dragon-breath-reflect' });
-          sideEffects.push({
-            event: 'log:entry',
-            payload: { type: 'equip', message: `${slotItem.name} 龙息：对 ${randomTarget.name} 造成 2 点伤害！` },
-          });
-          sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 龙息！` } });
-          for (let i = 0; i < overclockExtraBlock; i++) {
-            // 装备超频 ×N：龙息每层多触发一次（每次都对同一目标）。
-            enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: randomTarget.id, damage: 2, source: 'dragon-breath-reflect' });
-          }
-          if (overclockExtraBlock > 0) overclockFiredThisBlock = true;
-        }
+        rng = r.rng;
+        if (r.firedHandlerCount > 0 && overclockExtraBlock > 0) overclockFiredThisBlock = true;
       }
 
       // Shield auto-evolve
@@ -4310,18 +4264,35 @@ function reduceResolveBlock(
       });
       sideEffects.push({ event: 'ui:banner', payload: { text: `${monster.name} 连击！再来一次！` } });
 
-      // Reflect before follow-up
+      // Reflect before follow-up — migrated to registry (PR-5).
+      // shield-reflect-on-block handler gates on surfaceCtx.reflectDmg only,
+      // not slotItem fields — we pass a placeholder slotItem since `slotItem`
+      // is out of scope here (the elite-double-attack branch sits outside the
+      // `if (action.choice === 'shield')` block where `slotItem` is declared).
       if (reflectDmg > 0 && reflectBlockSlotId) {
-        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: reflectDmg, source: 'shield-reflect' });
-        sideEffects.push({ event: 'combat:shieldReflect', payload: { slotId: reflectBlockSlotId, targetId: monster.id } });
-        sideEffects.push({
-          event: 'log:entry',
-          payload: { type: 'combat', message: `${reflectSourceName} 反射了 ${reflectDmg} 点伤害！` },
-        });
-        for (let i = 0; i < overclockExtraBlock; i++) {
-          enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: reflectDmg, source: 'shield-reflect' });
-        }
-        if (overclockExtraBlock > 0) overclockFiredThisBlock = true;
+        const reflectSurfaceCtx: BlockCtx = {
+          monster,
+          blockSlotId: reflectBlockSlotId,
+          isPerfectBlock: false,
+          isFullBlockShield: false,
+          isMonsterEquipShield: false,
+          storedCap: 0,
+          pendingBlockAttackValue: pendingBlock.attackValue,
+          amuletEffects: ae,
+          reflectDmg,
+          reflectSourceName,
+          reflectBlockSlotId,
+        };
+        const reflectSlotItem = getSlotItem(state, reflectBlockSlotId);
+        const r = runEquipmentDerivedHandlers('block', {
+          state,
+          slotItem: (reflectSlotItem ?? { id: 'no-slot', type: 'shield', name: '', value: 0, image: '' }) as GameCardData,
+          slotId: reflectBlockSlotId,
+          patch, sideEffects, enqueuedActions, rng,
+          surface: 'block', surfaceCtx: reflectSurfaceCtx,
+        }, { only: ['shield-reflect-on-block'] });
+        rng = r.rng;
+        if (r.firedHandlerCount > 0 && overclockExtraBlock > 0) overclockFiredThisBlock = true;
       }
 
       // Set follow-up pending block
@@ -4351,19 +4322,33 @@ function reduceResolveBlock(
     }
   }
 
-  // Shield reflect damage (if not already done in follow-up)
+  // Shield reflect damage (if not already done in follow-up) — migrated to
+  // registry (PR-5). Same handler as the followup callsite above; mutually
+  // exclusive — at most ONE of these two callsites fires per reducer call.
   if (reflectDmg > 0 && reflectBlockSlotId) {
-    enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: reflectDmg, source: 'shield-reflect' });
-    sideEffects.push({ event: 'combat:shieldReflect', payload: { slotId: reflectBlockSlotId, targetId: monster.id } });
-    sideEffects.push({
-      event: 'log:entry',
-      payload: { type: 'combat', message: `${reflectSourceName} 反射了 ${reflectDmg} 点伤害！` },
-    });
-    for (let i = 0; i < overclockExtraBlock; i++) {
-      // 装备超频 ×N：盾反射伤害每层多触发一次。
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: reflectDmg, source: 'shield-reflect' });
-    }
-    if (overclockExtraBlock > 0) overclockFiredThisBlock = true;
+    const reflectSurfaceCtx: BlockCtx = {
+      monster,
+      blockSlotId: reflectBlockSlotId,
+      isPerfectBlock: false,
+      isFullBlockShield: false,
+      isMonsterEquipShield: false,
+      storedCap: 0,
+      pendingBlockAttackValue: pendingBlock.attackValue,
+      amuletEffects: ae,
+      reflectDmg,
+      reflectSourceName,
+      reflectBlockSlotId,
+    };
+    const reflectSlotItem = getSlotItem(state, reflectBlockSlotId);
+    const r = runEquipmentDerivedHandlers('block', {
+      state,
+      slotItem: (reflectSlotItem ?? { id: 'no-slot', type: 'shield', name: '', value: 0, image: '' }) as GameCardData,
+      slotId: reflectBlockSlotId,
+      patch, sideEffects, enqueuedActions, rng,
+      surface: 'block', surfaceCtx: reflectSurfaceCtx,
+    }, { only: ['shield-reflect-on-block'] });
+    rng = r.rng;
+    if (r.firedHandlerCount > 0 && overclockExtraBlock > 0) overclockFiredThisBlock = true;
   }
 
   // Golem 反震 (layer-loss reflect) — settle SEPARATELY and LAST.

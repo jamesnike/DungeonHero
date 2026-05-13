@@ -715,15 +715,15 @@ const tempAttackDouble: CardTextFormatter = (card) => {
   };
 };
 
-// 囊中锋意：升级表 [3, 2]（divisor）。Lv0 每 3 张牌 +1，Lv1 每 2 张牌 +1。
+// 囊中锋意：升级表 [3, 2]（divisor）。Lv0 每 3 张牌 +2，Lv1 每 2 张牌 +2。
 const backpackTempAttack: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
   const divisors = [3, 2];
   const div = pick(divisors, level);
   return {
-    description: `永久：选择一个装备栏，背包每 ${div} 张牌 +1 临时攻击。`,
-    shortDescription: `所选栏 +背包数÷${div} 临时攻击`,
-    magicEffect: `永久魔法：选择一个装备栏，背包每 ${div} 张牌 +1 临时攻击。`,
+    description: `永久：选择一个装备栏，背包每 ${div} 张牌 +2 临时攻击。`,
+    shortDescription: `所选栏 +背包数÷${div}×2 临时攻击`,
+    magicEffect: `永久魔法：选择一个装备栏，背包每 ${div} 张牌 +2 临时攻击。`,
   };
 };
 

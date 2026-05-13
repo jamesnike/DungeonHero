@@ -65,6 +65,18 @@ export interface AttackCtx {
   isBuildingTarget: boolean;
   attackEffectiveLifesteal: number;
   amuletEffects: ActiveAmuletEffects;
+  /**
+   * Scratch field for `post-attack-spell-damage` handler (PR-4b). Iter 1 picks
+   * a random target from the board and stores `{ id, damage }` here so iter
+   * 2..N (overclock replays) can re-target the same monster with the same
+   * damage number without re-rolling RNG. Mirrors the original inline loop's
+   * "target captured at iter 1, reused on subsequent loops" semantic.
+   *
+   * The original's defensive "if first target died, re-pick from survivors"
+   * branch is dead code in practice (iter-1 target is always alive when
+   * captured) and is intentionally not re-implemented here.
+   */
+  postAttackSpellTarget?: { id: string; damage: number };
 }
 
 /**
@@ -84,6 +96,19 @@ export interface BlockCtx {
   /** Reflect damage decided by main block path (0 if no reflect). */
   reflectDmg: number;
   reflectSourceName: string;
+  /**
+   * Slot whose `damageReflect` / `reflectFullDamage` / `reflectHalfDamage` is
+   * dispatching the reflect. Required for `combat:shieldReflect` side effect
+   * payload. `null` when `reflectDmg === 0`.
+   */
+  reflectBlockSlotId: EquipmentSlotId | null;
+  /**
+   * Scratch field for `dragon-breath-shield-retaliation` handler (PR-5). Iter
+   * 1 picks a random monster from the board (RNG-consuming) and stores its
+   * id; iter 2..N re-target the same cached monster without re-rolling RNG.
+   * Mirrors `attack-overkill.ts` `postAttackSpellTarget` pattern.
+   */
+  dragonBreathTarget?: { id: string };
 }
 
 /**
@@ -337,9 +362,27 @@ export interface RunResult {
 }
 
 /**
+ * Optional runner config — primarily used by the `attack` surface where the
+ * reducer's enqueue ordering is significant (HEAL must drain before subsequent
+ * APPLY_DAMAGE actions, etc.). Callers split the surface into multiple
+ * `runEquipmentDerivedHandlers` invocations at the original effect's call site,
+ * each scoped to a single handler id via `only`. See `attack-basic.ts` /
+ * `attack-overkill.ts` (PR-4) for usage.
+ */
+export interface RunnerOptions {
+  /**
+   * If provided, only handlers whose id is in this list will fire. Order
+   * follows the order of registered ids (NOT the order of this array) — the
+   * runner still iterates the registry's insertion order.
+   */
+  only?: string[];
+}
+
+/**
  * Run all registered handlers for a surface.
  *
- *   1. For each handler, call once with `isFirstIteration: true`.
+ *   1. For each handler (filtered by `options.only` when given), call once
+ *      with `isFirstIteration: true`.
  *   2. If that call returns `fired: true`, call it `overclockExtra` more times
  *      with `isFirstIteration: false` (where `overclockExtra` =
  *      `equipOverclockExtraTriggers(state)`).
@@ -353,7 +396,8 @@ export interface RunResult {
  */
 export function runEquipmentDerivedHandlers<S extends EquipmentDerivedSurface>(
   surface: S,
-  baseCtx: Omit<EquipmentDerivedCtx<S>, 'isFirstIteration'>,
+  baseCtx: Omit<EquipmentDerivedCtx<S>, 'isFirstIteration' | 'isLastIteration' | 'overclockExtra'>,
+  options?: RunnerOptions,
 ): RunResult {
   const handlers = getRegistry(surface);
   const overclockExtra = equipOverclockExtraTriggers(baseCtx.state);
@@ -362,11 +406,13 @@ export function runEquipmentDerivedHandlers<S extends EquipmentDerivedSurface>(
   let anyContributed = false;
   let firedCount = 0;
   let rng = baseCtx.rng;
+  const onlySet = options?.only ? new Set(options.only) : null;
 
   // `Map.forEach` (vs `for..of handlers.values()`) avoids needing
   // `--downlevelIteration` and matches the iteration style used by the sibling
   // `on-equip.ts` / `on-enter-hand.ts` registries.
-  handlers.forEach((handler) => {
+  handlers.forEach((handler, id) => {
+    if (onlySet && !onlySet.has(id)) return;
     // Mandatory first call.
     const ctxFirst: EquipmentDerivedCtx<S> = {
       ...baseCtx,

@@ -1,5 +1,12 @@
-# 装备超频 注册表化重构 — 详细 Plan
+# 装备超频 注册表化重构 — 详细 Plan ✅ 全部完成
 
+> **Status (2026-05-12)**: 所有 7 个 PR (PR-1 / PR-2 / PR-3 / PR-4a / PR-4b / PR-5 / PR-6) 已交付。
+> 25 处手写 `for (let i = 0; i < overclockExtra; i++)` 循环全部迁移到
+> `client/src/game-core/card-schema/equipment-derived/` 注册表。共 19 个 handler。
+> 新增 cursor rule `.cursor/rules/equipment-derived-handler.mdc` 防止回归。
+> 全量 vitest 通过率：2953/3013（baseline 60 失败均为本次改动**之前**的 pre-existing
+> 用户工作树问题，PR-1~6 零 regression）。
+>
 > Goal: 把「装备衍生效果在装备超频光环下额外触发 1+N 次」的逻辑，从 18+ 处手写
 > `for (let i = 0; i < overclockExtra; i++)` 散落实现，统一收敛到一套**注册表 + Runner**
 > 架构。新加装备字段时，只要把 handler 注册到对应表面，**自动**获得 1+N 倍触发，
@@ -7,6 +14,38 @@
 >
 > Constraint: **完全不产生 regression**。任何一处可见行为变化都必须显式 ack 并写进 PR
 > 描述里（含「哪个测试 case 抓到」+「为什么这是 intended improvement 而非 regression」）。
+
+---
+
+## 交付清单（按 PR）
+
+| PR | 范围 | Handler 数 | 文件 | 测试 | 状态 |
+|---|---|---|---|---|---|
+| PR-1 | 注册表基础设施 | — | `equipment-derived/registry.ts` (+ `index.ts` barrel) | `equipment-derived-registry.test.ts` (28 cases) | ✅ |
+| PR-2 | `durability-loss` 表面 | 4 | `equipment-derived/durability-loss.ts` | `equipment-derived-durability-loss.test.ts` (26 cases) | ✅ |
+| PR-3 | `shield-reflect` 表面 | 2 | `equipment-derived/shield-reflect.ts` | `equipment-derived-shield-reflect.test.ts` (15 cases) | ✅ |
+| PR-4a | `attack` 表面（基础类） | 7 | `equipment-derived/attack-basic.ts` | `equipment-derived-attack-basic.test.ts` (19 cases) | ✅ |
+| PR-4b | `attack` 表面（overkill / post-attack 类） | 4 | `equipment-derived/attack-overkill.ts` | `equipment-derived-attack-overkill.test.ts` (14 cases) | ✅ |
+| PR-5 | `block` 表面 | 6 | `equipment-derived/block.ts` | `equipment-derived-block.test.ts` (12 cases) | ✅ |
+| PR-6 | 收尾 | — | `.cursor/rules/equipment-derived-handler.mdc`（新规则）+ 本 plan 完成标记 | — | ✅ |
+
+**Handler 总计**：23 个（4 + 2 + 7 + 4 + 6）。**测试总计**：134 cases (registry + 5 surface suites)。
+
+## 残留 `equipOverclockExtraTriggers` 调用点（合规清单）
+
+PR-6 audit 后，`equipOverclockExtraTriggers` 还在以下位置被调用——**全部合规**：
+
+| 文件 : 行 | 用途 |
+|---|---|
+| `card-schema/equipment-derived/registry.ts:32, 403` | Runner 内部（**唯一**应该 import 的地方） |
+| `rules/equipment-overclock.ts:49` | 函数定义本身 |
+| `card-schema/on-equip.ts:75, 96` | `onEquipEffect` 兄弟机制（已经有自己的 1+N wrapper） |
+| `rules/equipment-effects.ts:866, 938` | `lastWords` 兄弟机制（不在 derived 注册表范围） |
+| `rules/combat.ts:1803, 2500, 3650` | reducer-级 `overclockFiredThisXxx` 标志计算（统一管 `combat:equipOverclockTriggered` 单次 emit） |
+| `__tests__/equip-overclock-aura.test.ts` | 测试 |
+
+**新文件不应再 import `equipOverclockExtraTriggers`**——参考新规则
+`.cursor/rules/equipment-derived-handler.mdc`。
 
 ---
 

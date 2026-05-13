@@ -2551,8 +2551,9 @@ const knightRecycleTempArmor: CardDefinition = {
 };
 
 // 囊中锋意 — Perm 1. Select an equipment slot (empty allowed); add
-// floor(state.backpackItems.length / divisor) temp attack to the chosen slot.
+// floor(state.backpackItems.length / divisor) * 2 temp attack to the chosen slot.
 // - divisor = 3 (L0) / 2 (L1)
+// - 每满 divisor 张牌给 +2 临时攻击（×2 倍率写死在 preview 公式里）
 // - Empty slots are allowed (buff persists on the slot for future equipment).
 // - Echo: card is played from hand → routes to recycle bag (recycleDelay: 1),
 //   never visiting backpack; so backpackItems.length stays constant between
@@ -2569,12 +2570,12 @@ const knightBackpackTempAttack: CardDefinition = {
   resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
     const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
     const divisor = (card.upgradeLevel ?? 0) >= 1 ? 2 : 3;
-    const previewBuff = Math.floor(state.backpackItems.length / divisor) * echoMultiplier;
+    const previewBuff = Math.floor(state.backpackItems.length / divisor) * 2 * echoMultiplier;
     patch.pendingMagicAction = {
       card,
       effect: 'backpack-temp-attack',
       step: 'slot-select',
-      prompt: `囊中锋意：选择一个装备栏，背包每 ${divisor} 张牌 +1 临时攻击（当前 +${previewBuff}）。${echoLabel}`,
+      prompt: `囊中锋意：选择一个装备栏，背包每 ${divisor} 张牌 +2 临时攻击（当前 +${previewBuff}）。${echoLabel}`,
       echoMultiplier,
     } as any;
     patch.heroSkillBanner = `囊中锋意：选择一个装备栏（当前 +${previewBuff} 临时攻击）。${echoLabel}`;

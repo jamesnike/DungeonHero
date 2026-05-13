@@ -641,8 +641,8 @@ export type PendingMagicAction =
       prompt: string;
     }
   | {
-      // 囊中锋意：选择装备栏（允许空槽），按 floor(背包数 / divisor) 加临时攻击。
-      // divisor = 3 (Lv0) / 2 (Lv1)。
+      // 囊中锋意：选择装备栏（允许空槽），按 floor(背包数 / divisor) × 2 加临时攻击。
+      // divisor = 3 (Lv0) / 2 (Lv1)，每满 divisor 张牌 +2 临时攻击。
       card: GameCardData;
       effect: 'backpack-temp-attack';
       step: 'slot-select';

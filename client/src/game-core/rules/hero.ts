@@ -1445,8 +1445,9 @@ function reduceMagicSlotSelection(
     }
 
     case 'backpack-temp-attack': {
-      // 囊中锋意：buff = floor(state.backpackItems.length / divisor) * echo
+      // 囊中锋意：buff = floor(state.backpackItems.length / divisor) * 2 * echo
       // - divisor = 3 (Lv0) / 2 (Lv1)
+      // - 每满 divisor 张牌给 +2 临时攻击（×2 倍率写死在公式里，升级 handler 是 noop）
       // - 空槽允许选（与 temp-attack-double / temp-attack-armor-draw / temp-stats-to-draw
       //   一致）：buff 写到 slotTempAttack[slotId]，等装备进入时仍生效。
       // - Echo (A 类，与 C 类等价 — 这张卡进回收袋而非背包)：
@@ -1455,7 +1456,7 @@ function reduceMagicSlotSelection(
       const echoMul = (pending as any).echoMultiplier ?? 1;
       const divisor = (pending.card.upgradeLevel ?? 0) >= 1 ? 2 : 3;
       const backpackLen = state.backpackItems.length;
-      const baseBuff = Math.floor(backpackLen / divisor);
+      const baseBuff = Math.floor(backpackLen / divisor) * 2;
       const buff = baseBuff * echoMul;
       const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
       const curTempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
@@ -1464,7 +1465,7 @@ function reduceMagicSlotSelection(
       const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
       const formulaTag = echoMul > 1 ? `${baseBuff}×${echoMul}=${buff}` : `${buff}`;
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `囊中锋意：${label} 临时攻击 +${formulaTag}（背包 ${backpackLen} 张 ÷ ${divisor}）。${echoTag}`);
+        `囊中锋意：${label} 临时攻击 +${formulaTag}（背包 ${backpackLen} 张 ÷ ${divisor} × 2）。${echoTag}`);
     }
 
     case 'temp-stats-to-draw': {

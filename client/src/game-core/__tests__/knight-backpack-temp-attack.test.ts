@@ -2,8 +2,9 @@
  * 囊中锋意 (knight:backpack-temp-attack) — Perm 1 magic.
  *
  * On play: opens slot-select. On RESOLVE_MAGIC_SLOT_SELECTION:
- *   buff = floor(state.backpackItems.length / divisor) * echoMultiplier
+ *   buff = floor(state.backpackItems.length / divisor) * 2 * echoMultiplier
  *   divisor = 3 (Lv0) / 2 (Lv1)
+ *   每满 divisor 张牌 +2 临时攻击（×2 倍率写死在公式里）
  *   slotTempAttack[chosenSlot] += buff
  *
  * - Empty slot is allowed (buff still applies; future equipment inherits it).
@@ -33,7 +34,7 @@ function makeCard(idSuffix = 'btatk', upgradeLevel = 0) {
     image: '',
     classCard: true,
     magicType: 'permanent' as const,
-    magicEffect: '永久魔法：选择一个装备栏，背包每 3 张牌 +1 临时攻击。',
+    magicEffect: '永久魔法：选择一个装备栏，背包每 3 张牌 +2 临时攻击。',
     description: 'test',
     knightEffect: 'backpack-temp-attack',
     recycleDelay: 1,
@@ -55,7 +56,7 @@ function makeBackpack(n: number): GameCardData[] {
   return Array.from({ length: n }, (_, i) => makeBackpackCard(`bp-${i}`));
 }
 
-describe('囊中锋意 主效果: slot-select → floor(backpack.length / divisor) 临时攻击', () => {
+describe('囊中锋意 主效果: slot-select → floor(backpack.length / divisor) × 2 临时攻击', () => {
   it('PLAY_CARD opens slot-select pendingMagicAction with effect=backpack-temp-attack', () => {
     const card = makeCard('cast');
     const state = makeState({ handCards: [card] });
@@ -65,7 +66,7 @@ describe('囊中锋意 主效果: slot-select → floor(backpack.length / diviso
     expect((result.state.pendingMagicAction as any).step).toBe('slot-select');
   });
 
-  it('Lv0, backpack=9 → floor(9/3)=3 → slotTempAttack +3 on chosen slot', () => {
+  it('Lv0, backpack=9 → floor(9/3)=3 ×2 = 6 → slotTempAttack +6 on chosen slot', () => {
     const card = makeCard('lv0', 0);
     const state = makeState({
       handCards: [card],
@@ -81,12 +82,12 @@ describe('囊中锋意 主效果: slot-select → floor(backpack.length / diviso
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'backpack-temp-attack', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(3);
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(6);
     expect(result.state.slotTempAttack?.equipmentSlot2).toBe(0);
     expect(result.state.pendingMagicAction).toBeNull();
   });
 
-  it('Lv0, backpack=2 → floor(2/3)=0 → +0 buff but still resolves', () => {
+  it('Lv0, backpack=2 → floor(2/3)=0 ×2=0 → +0 buff but still resolves', () => {
     const card = makeCard('zero', 0);
     const state = makeState({
       handCards: [card],
@@ -106,7 +107,7 @@ describe('囊中锋意 主效果: slot-select → floor(backpack.length / diviso
     expect(result.state.pendingMagicAction).toBeNull();
   });
 
-  it('Lv0, backpack=10 → floor(10/3)=3 (rounding down)', () => {
+  it('Lv0, backpack=10 → floor(10/3)=3 ×2=6 (rounding down before ×2)', () => {
     const card = makeCard('round', 0);
     const state = makeState({
       handCards: [card],
@@ -122,10 +123,10 @@ describe('囊中锋意 主效果: slot-select → floor(backpack.length / diviso
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'backpack-temp-attack', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(3);
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(6);
   });
 
-  it('Lv1 (divisor=2), backpack=7 → floor(7/2)=3', () => {
+  it('Lv1 (divisor=2), backpack=7 → floor(7/2)=3 ×2=6', () => {
     const card = makeCard('lv1', 1);
     const state = makeState({
       handCards: [card],
@@ -141,10 +142,10 @@ describe('囊中锋意 主效果: slot-select → floor(backpack.length / diviso
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'backpack-temp-attack', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(3);
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(6);
   });
 
-  it('Lv1, backpack=8 → floor(8/2)=4 (compared to Lv0 which would be 2)', () => {
+  it('Lv1, backpack=8 → floor(8/2)=4 ×2=8 (compared to Lv0 which would be floor(8/3)=2 ×2=4)', () => {
     const card = makeCard('lv1-8', 1);
     const state = makeState({
       handCards: [card],
@@ -160,10 +161,10 @@ describe('囊中锋意 主效果: slot-select → floor(backpack.length / diviso
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'backpack-temp-attack', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(4);
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(8);
   });
 
-  it('empty slot allowed: buff still applied to chosen empty slot', () => {
+  it('empty slot allowed: buff still applied to chosen empty slot (backpack=6 → floor(6/3)=2 ×2=4)', () => {
     const card = makeCard('empty', 0);
     const state = makeState({
       handCards: [card],
@@ -181,12 +182,12 @@ describe('囊中锋意 主效果: slot-select → floor(backpack.length / diviso
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'backpack-temp-attack', slotId: 'equipmentSlot2' } as GameAction,
     ]);
-    expect(result.state.slotTempAttack?.equipmentSlot2).toBe(2);
+    expect(result.state.slotTempAttack?.equipmentSlot2).toBe(4);
     expect(result.state.slotTempAttack?.equipmentSlot1).toBe(0);
     expect(result.state.pendingMagicAction).toBeNull();
   });
 
-  it('only the chosen slot is buffed (other slot untouched)', () => {
+  it('only the chosen slot is buffed (other slot untouched, backpack=9 → +6 to chosen)', () => {
     const card = makeCard('one-side', 0);
     const state = makeState({
       handCards: [card],
@@ -203,10 +204,10 @@ describe('囊中锋意 主效果: slot-select → floor(backpack.length / diviso
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'backpack-temp-attack', slotId: 'equipmentSlot2' } as GameAction,
     ]);
     expect(result.state.slotTempAttack?.equipmentSlot1).toBe(5);
-    expect(result.state.slotTempAttack?.equipmentSlot2).toBe(7 + 3);
+    expect(result.state.slotTempAttack?.equipmentSlot2).toBe(7 + 6);
   });
 
-  it('echoMultiplier x2: floor(9/3)=3, ×2=6 buff', () => {
+  it('echoMultiplier x2: floor(9/3)=3, ×2 (base)=6, ×2 (echo)=12 buff', () => {
     const card = makeCard('echo', 0);
     const state = makeState({
       handCards: [card],
@@ -223,7 +224,7 @@ describe('囊中锋意 主效果: slot-select → floor(backpack.length / diviso
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'backpack-temp-attack', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(6);
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(12);
   });
 
   it('echoMultiplier x2 with backpack=2 (base=0) → 0×2=0 (zero stays zero)', () => {
@@ -246,7 +247,7 @@ describe('囊中锋意 主效果: slot-select → floor(backpack.length / diviso
     expect(result.state.slotTempAttack?.equipmentSlot1).toBe(0);
   });
 
-  it('preserves existing slotTempAttack on the chosen slot (additive)', () => {
+  it('preserves existing slotTempAttack on the chosen slot (additive, backpack=6 → +4)', () => {
     const card = makeCard('add', 0);
     const state = makeState({
       handCards: [card],
@@ -262,10 +263,10 @@ describe('囊中锋意 主效果: slot-select → floor(backpack.length / diviso
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'backpack-temp-attack', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(4 + 2);
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(4 + 4);
   });
 
-  it('end-to-end: PLAY_CARD then RESOLVE_MAGIC_SLOT_SELECTION (full chain)', () => {
+  it('end-to-end: PLAY_CARD then RESOLVE_MAGIC_SLOT_SELECTION (full chain, backpack=6 → +4)', () => {
     const card = makeCard('e2e', 0);
     const state = makeState({
       phase: 'playerInput',
@@ -278,7 +279,7 @@ describe('囊中锋意 主效果: slot-select → floor(backpack.length / diviso
     const afterResolve = drain(afterPlay.state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'backpack-temp-attack', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(afterResolve.state.slotTempAttack?.equipmentSlot1).toBe(2);
+    expect(afterResolve.state.slotTempAttack?.equipmentSlot1).toBe(4);
     expect(afterResolve.state.pendingMagicAction).toBeNull();
     // Card routed to recycle bag (recycleDelay: 1), not graveyard.
     expect(afterResolve.state.permanentMagicRecycleBag.some(c => c.id === card.id)).toBe(true);

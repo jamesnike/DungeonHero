@@ -1,0 +1,214 @@
+# 装备衍生效果（attack / block / shield-reflect / durability-loss）必须用 registry，不要写 raw `for (overclockExtra)` 循环
+
+## 背景：为什么有这条规则
+
+**「装备超频」**（永恒护符 `equip-overclock`，回收袋 > 10 张时激活，可叠 N 层）让
+**装备衍生效果**额外触发 `1 + N` 次。曾经每次新加这类效果都要手写：
+
+```ts
+const overclockExtra = equipOverclockExtraTriggers(state);
+// ...do the effect once...
+for (let i = 0; i < overclockExtra; i++) {
+  // ...do it again N more times...
+}
+if (overclockExtra > 0) overclockFiredThisXxx = true;
+```
+
+散落在 25+ 处。每次新加效果忘写循环 = 玩家用了「装备超频药」却**完全无感**。
+经过 5 个 PR 的 refactor，已经统一收敛到一套 **`equipment-derived` 注册表 + Runner**
+架构：handler 注册一次，自动获得 1+N 次触发，永久消除「漏写循环」类 bug。
+
+## 不变量
+
+> **任何「装备衍生效果」（武器 / 盾 / 怪物装备形态 在攻击 / 格挡 / 反伤 / 失去耐久 时触发的副作用），
+> 必须注册成 `EquipmentDerivedHandler<surface>`，不允许在 `combat.ts` /
+> `equipment-effects.ts` 等 reducer 里写 `for (let i = 0; i < overclockExtra; i++)` 循环。**
+
+## 4 个表面 + 注册表文件
+
+```
+client/src/game-core/card-schema/equipment-derived/
+├── registry.ts              # Map<id, handler>; runEquipmentDerivedHandlers
+├── attack-basic.ts          # heal-on-attack / draw-on-attack / boss-retaliation-attack /
+│                            #   heal-on-kill / kill-gold-scaling /
+│                            #   dragon-breath-retaliation-attack / post-attack-hand-recycle
+├── attack-overkill.ts       # overkill-lifesteal / overkill-draw /
+│                            #   overkill-amplify-missile / post-attack-spell-damage
+├── block.ts                 # dual-guard-armor / perfect-block-max-hp-gain /
+│                            #   perfect-block-spawn-missiles /
+│                            #   block-grant-temp-armor-to-other /
+│                            #   dragon-breath-shield-retaliation /
+│                            #   shield-reflect-on-block
+├── shield-reflect.ts        # dragon-breath-retaliation / boss-retaliation
+└── durability-loss.ts       # mine-damage-boost / bleed-attack-bonus /
+                             #   wraith-rebirth / golem-layer-loss-reflect
+```
+
+各表面的 callsite：
+
+| Surface | Reducer / 函数 | 文件 |
+|---|---|---|
+| `attack` | `reducePerformHeroAttack` | `rules/combat.ts` |
+| `block` | `reduceResolveBlock` | `rules/combat.ts` |
+| `shield-reflect` | `reduceApplyShieldReflect` | `rules/combat.ts` |
+| `durability-loss` | `computeDurabilityLossEffects` | `rules/equipment-effects.ts` |
+
+## 兄弟机制（不在本规则范围）
+
+以下机制**已经**有自己的「自动 1+N 倍」wrapper，不要重新走 `equipment-derived`：
+
+| 机制 | 注册表 | 自动 wrap 位置 |
+|---|---|---|
+| `onEquipEffect` | `card-schema/on-equip.ts` | `executeOnEquip` 内置 1+N 循环 |
+| 装备 `lastWords` | — | `equipment-effects.ts:applyOneEquipmentLastWordsIteration` 在 `1 + lastWordsExtraTriggerCount + overclockExtra` 循环里 |
+
+**不要**给 `onEquipEffect` / `lastWords` 类型的效果再注册到 `equipment-derived` ——
+会导致**双重 1+N 倍触发**。
+
+## 设计上**显式排除**装备超频的范围（任何重构都不要碰）
+
+这些机制**故意**不被装备超频复制，跟 `equipment-derived` 注册表无关：
+
+- 武器挥击伤害本身、格挡判定本身（armor 计算 / durability tick）
+- 手牌卡 `onDiscardDamage` / `onEnterHand`
+- 护符（amulet）效果本身
+- 怪物 `enterEffect` / 建筑 / row-level 效果
+
+## 强制规则
+
+### 1. 加新「装备衍生效果」时，注册 handler，不要写 raw 循环
+
+```ts
+// ❌ BAD —— 不要在 reducer 里直接写
+function reducePerformHeroAttack(state, action) {
+  // ...
+  const overclockExtra = equipOverclockExtraTriggers(state);
+  if ((slotItem as GameCardData).myNewField) {
+    enqueuedActions.push({ type: 'HEAL', amount: 5, source: 'my-new-effect' });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'heal', message: '...' } });
+    for (let i = 0; i < overclockExtra; i++) {
+      enqueuedActions.push({ type: 'HEAL', amount: 5, source: 'my-new-effect' });
+    }
+    if (overclockExtra > 0) overclockFiredThisAttack = true;
+  }
+}
+```
+
+```ts
+// ✅ GOOD —— 注册 handler 在 attack-basic.ts (或新建一个 attack-myfeature.ts)
+const myNewEffectHandler: EquipmentDerivedHandler<'attack'> = (ctx) => {
+  const { slotItem, isFirstIteration, sideEffects, enqueuedActions } = ctx;
+  if (!(slotItem as GameCardData).myNewField) return { fired: false };
+
+  enqueuedActions.push({ type: 'HEAL', amount: 5, source: 'my-new-effect' });
+  if (isFirstIteration) {
+    sideEffects.push({ event: 'log:entry', payload: { type: 'heal', message: '...' } });
+  }
+  return { fired: true, contributedToOverclock: false };
+};
+
+registerEquipmentDerivedHandlers('attack', [
+  { id: 'my-new-effect', handler: myNewEffectHandler },
+]);
+```
+
+然后在 reducer 的对应 callsite 调 runner（attack 表面用 `only` 过滤精确控制顺序）：
+
+```ts
+const ctx: AttackCtx = { /* ... */ };
+const r = runEquipmentDerivedHandlers('attack', {
+  state, slotItem, slotId, patch, sideEffects, enqueuedActions, rng,
+  surface: 'attack', surfaceCtx: ctx,
+}, { only: ['my-new-effect'] });
+rng = r.rng;
+if (r.firedHandlerCount > 0 && overclockExtra > 0) overclockFiredThisAttack = true;
+```
+
+### 2. Handler 必须遵守的 replay-safety contract
+
+- **`isFirstIteration`** 包一切「该只 emit 一次」的副作用：log entry / banner /
+  counter +1 / kill counter / 任何「玩家看到这一次的视觉提示」。
+- **`isLastIteration`** 给「攒一次最终结果再 emit」的 handler 用（如 wraith-rebirth
+  「全部失败」log）。
+- **`overclockExtra`** 给「iter 1 想知道总共要 emit 多少」用（如 bleed log 显示
+  aggregate `+9 (= 3 × (1+2))` 而不是 3 个独立 `+3`）。
+- **RNG**：read-then-write `ctx.rng = nextRng`。Runner 在 iteration 之间 thread RNG。
+- **缓存 RNG-derived 选择**：如果 iter 1 用 RNG 抽了一个目标 / pool 元素，iter 2..N
+  应当**复用**同一选择（写到 `surfaceCtx.<scratchField>`，参考 `postAttackSpellTarget`
+  / `dragonBreathTarget` pattern），不要重新 RNG 抽——会破坏「同 seed → 同结果」
+  的 deterministic replay。
+- **`contributedToOverclock: false`**：默认是 `fired` 自身。绝大多数 handler 应当
+  返回 `false`，让 reducer 内的 `overclockFiredThisXxx` 标志统一管理结尾的单次
+  `combat:equipOverclockTriggered` emit；handler 自己 emit 会跟 reducer inline
+  emit **重复**（用户会看到双倍 banner / 双倍 log）。
+
+### 3. `attack` 表面：用 `RunnerOptions.only` 保留 enqueue 顺序
+
+`attack` 表面的 reducer 顺序敏感：HEAL 必须在 APPLY_DAMAGE 之前 drain，
+boss-retaliation 必须在击杀逻辑之前等等。**不要**把所有 attack handler 一次跑完——
+在原 callsite 位置调多次 runner，每次 `only: ['<id>']` 限定一个 handler。
+参考 `combat.ts:reducePerformHeroAttack` 的 7 处 callsite。
+
+`block` 表面顺序也敏感（5 个 perfect-block 类先跑，2 个 reflect 类后跑）——
+当前实现是 1 次 5-handler 调用 + 2 次 reflect 调用。
+
+`shield-reflect` 和 `durability-loss` 表面顺序不敏感，可以一次跑完所有 handler。
+
+### 4. 测试覆盖
+
+新加 handler 必须配套 per-handler 测试，放在 `__tests__/equipment-derived-<surface>.test.ts`：
+
+- 基础情况（overclock=0）：触发 1 次。
+- 装备超频 ×N：触发 1+N 次（断言 enqueuedActions 数量、log 数量、side fx 数量）。
+- 不该触发的 case：相反 gate 字段缺失时不触发。
+- 单次 `combat:equipOverclockTriggered` emit per reducer call（多 handler 同时 fire 时仍然只 emit 1 次）。
+- RNG 确定性：同 seed → 同选择（如果 handler 用 RNG）。
+
+参考实现：`equipment-derived-attack-basic.test.ts` / `equipment-derived-block.test.ts` 等。
+
+## What NOT to do
+
+- ❌ 在 reducer 里写 `for (let i = 0; i < equipOverclockExtraTriggers(state); i++)` 循环来 N 倍触发新效果。
+- ❌ 给 `onEquipEffect` / `lastWords` 类的效果再注册一份 `equipment-derived` handler——双重 1+N。
+- ❌ Handler 里写 log / banner / counter 不包 `isFirstIteration`——玩家看到 N+1 倍 spam。
+- ❌ Handler 里 RNG 抽目标后 iter 2..N **重新**抽——破坏确定性，bug 难复现。
+- ❌ Handler 返回 `contributedToOverclock: true` 同时 reducer 又有 inline emit——双倍 `combat:equipOverclockTriggered` side effect。
+- ❌ 把 `equipOverclockExtraTriggers` import 加进新文件来手写循环。这个函数应该只被以下文件 import：
+  - `card-schema/equipment-derived/registry.ts`（runner 内部）
+  - `card-schema/on-equip.ts` / `equipment-effects.ts`（onEquipEffect / lastWords 兄弟机制）
+  - `rules/combat.ts`（已有的 reducer-级 `overclockFiredThisXxx` 标志，不再新增）
+  - `rules/equipment-overclock.ts`（定义本身）
+  - 测试文件
+  **新文件**不该 import 它——你应该写 handler，让 runner 帮你。
+
+## What to do
+
+- ✅ 新加装备衍生字段时，先决定属于哪个表面（attack / block / shield-reflect / durability-loss），然后在对应文件注册 handler。
+- ✅ 跟现成的兄弟 handler 抄写法（`attack-basic.ts` / `block.ts` / `shield-reflect.ts` / `durability-loss.ts`）。
+- ✅ Handler 默认 `contributedToOverclock: false`，让 reducer 的 inline 标志统一管 emit。
+- ✅ RNG-derived 选择缓存到 `surfaceCtx.<scratchField>`（必要时给 `BlockCtx` / `AttackCtx` 加新可选字段）。
+- ✅ 写测试覆盖 overclock=0 / overclock=N / 不触发 / 单次 emit / RNG 确定性。
+
+## 自检：写新装备衍生效果时停下来问自己
+
+> 1. 我是不是要在 reducer 里写 `for (let i = 0; i < overclockExtra; i++)`？如果是，停下，改成注册 handler。
+> 2. 这个效果属于 4 个表面里哪一个？对应注册到哪个文件？
+> 3. Handler 里 emit log / banner / counter 的代码有没有包 `isFirstIteration`？
+> 4. 如果用 RNG 抽了选择，iter 2..N 是不是复用 cached 选择而不是重新抽？
+> 5. 我返回 `contributedToOverclock: false` 了吗？（除非 reducer 没有 inline `overclockFiredThisXxx` 标志，否则必须 false）
+> 6. 我有没有给这个 handler 写 per-handler 测试？
+
+任意一条「没」或「不确定」，回头补完再交。
+
+## 跟其它规则的关系
+
+| 关注点 | 这条规则 | 其它规则 |
+|---|---|---|
+| 装备衍生效果用 registry 而非 raw 循环 | ✅ 这条 | ❌ |
+| `onEquipEffect` 用注册表（不是 imperative chain） | ❌ | `no-imperative-card-handlers` |
+| 装备销毁后 broken self 路由到坟场 / 回收袋 | ❌ | `equipment-break-routes-to-grave` |
+| 装备耐久度上限封顶 4 | ❌ | `equipment-durability-cap` |
+| 护盾 `armor` vs `durability` 语义 | ❌ | `shield-armor-vs-durability` |
+| 多步 reducer 用 enqueuedActions | ❌ | `reducer-patterns` |
+
+加新装备相关效果时，这几条规则**都要核对**。

@@ -17,9 +17,9 @@ import type {
 import type { GameState } from '../types';
 import type { SideEffect } from '../reducer';
 import type { GameAction } from '../actions';
-import { flattenActiveRowSlots, applyAmplifyOnCreate } from '../helpers';
+import { applyAmplifyOnCreate } from '../helpers';
 import type { RngState } from '../rng';
-import { nextBool, nextInt, pickRandom } from '../rng';
+import { nextBool, nextInt } from '../rng';
 import { createBugletCard } from '../deck';
 import { resetCardForGraveyard, getEffectiveHandLimit } from '../cards';
 import { applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../equipment';
@@ -27,6 +27,13 @@ import { createMineBuilding } from '@/lib/knightDeck';
 import { applyGainMagicBolts, formatGainMagicBoltsDistribution } from '../events';
 import type { MineCollision } from '../combat';
 import { equipOverclockExtraTriggers } from './equipment-overclock';
+// Equipment-derived registry: imported from `./registry` directly (NOT from
+// the barrel `./index`) to avoid a cycle — handler modules in the barrel
+// import from this file (`accumulateMineDamageBoost` etc.).
+import {
+  runEquipmentDerivedHandlers,
+  type DurabilityLossCtx,
+} from '../card-schema/equipment-derived/registry';
 
 // ---------------------------------------------------------------------------
 // Perm-recycle routing — equipment that is destroyed but carries a Perm flag
@@ -1134,61 +1141,67 @@ export function computeDurabilityLossEffects(
   const isMonsterEquip = slotItem.type === 'monster';
   const otherSlotId = otherSlot(slotId);
   const otherItem = getSlotItem(state, otherSlotId);
-  const effects: SideEffect[] = [];
+  const sideEffects: SideEffect[] = [];
   const patch: Partial<GameState> = {};
-  let rng = state.rng;
-  let updatedItem = { ...slotItem, durability: newDurability };
-
-  // 永恒护符·装备超频 aura (stackable): bag > 10 时耐久损耗的衍生效果额外触发 N 次
-  // （N = count of equip-overclock relics held）。仅复制衍生效果
-  // （mine boost / bleed / dragonBleedDestroy / wraith-rebirth / swarm-elite /
-  // golemLayerLossReflect），不复制 durability -N 本身。
-  const overclockExtra = equipOverclockExtraTriggers(state);
-  let overclockFiredHere = false;
-
-  // 「引雷阵锋」类武器：耐久减少 → 累加 globalMineDamageBonus（永久不撤销）。
-  // 放在最早处理，确保所有路径（monster equip 走下面的 bleed/dragon/wraith 分支
-  // 后 return；非 monster 直接 return）都不会漏触发。
   const prevDur = slotItem.durability ?? newDurability;
   const durLost = Math.max(0, prevDur - newDurability);
-  if (durLost > 0) {
-    accumulateMineDamageBoost(state, slotItem, durLost, patch, effects);
-    if (overclockExtra > 0 && (slotItem.mineDamageBoostPerDur ?? 0) > 0) {
-      // 装备超频 ×N：地雷加成再触发 N 次（相当于 durLost ×(1+N) 效果）。
-      for (let i = 0; i < overclockExtra; i++) {
-        accumulateMineDamageBoost(state, slotItem, durLost, patch, effects);
-      }
-      overclockFiredHere = true;
-    }
-  }
+
+  // ---- Run the 4 overclocked durability-loss handlers via the registry ----
+  //
+  // Effects covered: mine-damage-boost, bleed-attack-bonus, wraith-rebirth,
+  // golem-layer-loss-reflect. See `card-schema/equipment-derived/durability-loss.ts`.
+  // The runner replays each handler `1 + N` times (N = equip-overclock extra
+  // triggers) and emits `combat:equipOverclockTriggered` once if at least
+  // one handler iteration `contributedToOverclock`.
+  //
+  // Order vs original computeDurabilityLossEffects flow (mine → bleed →
+  // dragon → wraith → swarm → golem): the 4 overclocked handlers all run
+  // first (mine → bleed → wraith → golem), then non-overclocked dragon and
+  // swarm run inline. Verified safe: dragon checks `newDurability` (param,
+  // not updated `surfaceCtx.updatedItem.durability`) so wraith-refill doesn't
+  // affect its branch; swarm's `patch[otherSlotId]` write doesn't conflict
+  // with golem's `state.activeCards` read.
+  const surfaceCtx: DurabilityLossCtx = {
+    prevDur,
+    newDur: newDurability,
+    durLost,
+    isMonsterEquip,
+    otherSlotId,
+    otherItem,
+    updatedItem: { ...slotItem, durability: newDurability },
+  };
+  const enqueuedActions: GameAction[] = [];  // unused for this surface (handlers don't enqueue)
+  const runResult = runEquipmentDerivedHandlers('durability-loss', {
+    state,
+    slotItem,
+    slotId,
+    patch,
+    sideEffects,
+    enqueuedActions,
+    rng: state.rng,
+    surface: 'durability-loss',
+    surfaceCtx,
+  });
+  let rng = runResult.rng;
+  let updatedItem = surfaceCtx.updatedItem;
+  const golemReflectDamage = surfaceCtx.golemReflectDamage;
 
   if (!isMonsterEquip) {
-    if (overclockFiredHere) {
-      effects.push({
-        event: 'combat:equipOverclockTriggered',
-        payload: { surface: 'durability', count: overclockExtra },
-      });
-    }
-    return { updatedItem, patch, sideEffects: effects, rng };
-  }
-
-  // Bleed effect: +3 attack on durability loss
-  if (slotItem.bleedEffect) {
-    const bleedBonus = 3 * (1 + overclockExtra);
-    updatedItem = {
-      ...updatedItem,
-      attack: (updatedItem.attack ?? updatedItem.value) + bleedBonus,
-      value: updatedItem.value + bleedBonus,
-      specialAttackBoost: (updatedItem.specialAttackBoost ?? 0) + bleedBonus,
+    // Non-monster equipment: skip dragon/swarm (those gate on monster-only
+    // fields anyway) and run the armor-strip cleanup. Note armor strip is
+    // a no-op for weapon types since they don't carry an `armor` field, but
+    // keeping it unified avoids code duplication.
+    const preservedDurability = updatedItem.durability;
+    const { armor: _strippedArmor, ...armorStrippedItem } = updatedItem as GameCardData & {
+      armor?: number;
     };
-    effects.push({
-      event: 'log:entry',
-      payload: { type: 'equip', message: `${slotItem.name} 流血：攻击力 +${bleedBonus}！（当前 ${updatedItem.attack}）` },
-    });
-    if (overclockExtra > 0) overclockFiredHere = true;
+    void _strippedArmor;
+    updatedItem = { ...(armorStrippedItem as GameCardData), durability: preservedDurability ?? newDurability };
+    return { updatedItem, patch, sideEffects, rng };
   }
 
-  // Dragon bleed destroy — destroy other slot if its durability > this item's remaining
+  // ---- Inline (NOT overclocked): dragon-bleed-destroy ----
+  // 一次性破坏判定 — overclock 重放无意义（destroy 已经发生）。
   if (slotItem.dragonBleedDestroy && otherItem && (otherItem.durability ?? 0) > newDurability) {
     const card = otherItem as GameCardData;
     const isOtherMonster = card.type === 'monster';
@@ -1199,122 +1212,52 @@ export function computeDurabilityLossEffects(
         ? { ...card, durability: 1, reviveUsed: true }
         : { ...card, durability: 1, equipmentReviveUsed: true };
       patch[otherSlotId] = revived as EquipmentItem;
-      effects.push({
+      sideEffects.push({
         event: 'log:entry',
         payload: { type: 'equip', message: `${slotItem.name} 破甲：「${otherItem.name}」（耐久 ${otherItem.durability} > ${newDurability}）复生了！` },
       });
     } else {
       clearSlotAndPromoteReserve(state, otherSlotId, patch);
-      effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId: otherSlotId } });
-      effects.push({
+      sideEffects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId: otherSlotId } });
+      sideEffects.push({
         event: 'equipment:destroyed',
         payload: { slotId: otherSlotId, cardId: card.id },
       });
-      effects.push({
+      sideEffects.push({
         event: 'log:entry',
         payload: { type: 'equip', message: `${slotItem.name} 破甲：破坏了「${otherItem.name}」（耐久 ${otherItem.durability} > ${newDurability}）！` },
       });
       // Skeleton re-revive on self when other destroyed
       if (slotItem.skeletonReRevive && (!slotItem.hasRevive || slotItem.reviveUsed)) {
         updatedItem = { ...updatedItem, hasRevive: true, reviveUsed: false };
-        effects.push({
+        sideEffects.push({
           event: 'log:entry',
           payload: { type: 'equip', message: `${slotItem.name} 轮回：获得了「复生」！` },
         });
-        effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 轮回！` } });
+        sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 轮回！` } });
       }
     }
-    effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 破甲！高耐久装备被破坏！` } });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 破甲！高耐久装备被破坏！` } });
   }
 
-  // Wraith rebirth — 50% chance to refill durability when at 1
-  if (slotItem.monsterSpecial === 'wraith-rebirth' && newDurability === 1 && !slotItem.wraithRebirthUsed) {
-    // First roll: base 50%
-    let [rebirthSuccess, nextRng] = nextBool(rng);
-    rng = nextRng;
-    let rescuedByOverclock = false;
-    // 装备超频 ×N：每层在主 roll 失败时再额外摇一次。N 层 → 概率 1 - 0.5^(1+N)。
-    if (overclockExtra > 0 && !rebirthSuccess) {
-      for (let i = 0; i < overclockExtra && !rebirthSuccess; i++) {
-        const [tryAgain, rng3] = nextBool(rng);
-        rng = rng3;
-        if (tryAgain) {
-          rebirthSuccess = true;
-          rescuedByOverclock = true;
-        }
-      }
-      if (rescuedByOverclock) overclockFiredHere = true;
-    }
-    if (rebirthSuccess) {
-      const maxDur = slotItem.maxDurability ?? (slotItem.durability ?? 1);
-      updatedItem = { ...updatedItem, durability: maxDur, wraithRebirthUsed: true };
-      effects.push({
-        event: 'log:entry',
-        payload: {
-          type: 'equip',
-          message: `${slotItem.name} 重生：耐久回满！（${maxDur}）${rescuedByOverclock ? ' — 装备超频补救' : ''}`,
-        },
-      });
-      effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 重生！` } });
-    } else {
-      updatedItem = { ...updatedItem, wraithRebirthUsed: true };
-      effects.push({
-        event: 'log:entry',
-        payload: {
-          type: 'equip',
-          message: overclockExtra > 0
-            ? `${slotItem.name} 重生失败！（装备超频×${overclockExtra} 补救也未触发）`
-            : `${slotItem.name} 重生失败！（50%）`,
-        },
-      });
-    }
-  }
-
-  // Swarm elite — replace other slot with buglet
+  // ---- Inline (NOT overclocked): swarm-elite ----
+  // 一次性替换 — overclock 重放无意义（other slot 只能被 buglet 替换一次）。
   if (slotItem.monsterSpecial === 'swarm-elite' && otherItem) {
-    effects.push({
+    sideEffects.push({
       event: 'equipment:destroyed',
       payload: { slotId: otherSlotId, cardId: otherItem.id },
     });
     const bugletEquip = applyAmplifyOnCreate(createBugletCard(), state.amplifiedCardBonus);
     const bugletAsEquip = { ...bugletEquip, durability: 1, maxDurability: 1 };
     patch[otherSlotId] = bugletAsEquip as EquipmentItem;
-    effects.push({
+    sideEffects.push({
       event: 'log:entry',
       payload: { type: 'equip', message: `${slotItem.name} 虫母：${otherItem.name} 被替换为小虫子！` },
     });
-    effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 虫母！` } });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 虫母！` } });
   }
 
-  // Golem layer loss reflect — damage random monster
-  let golemReflectDamage: DurabilityLossResult['golemReflectDamage'];
-  if (slotItem.golemLayerLossReflect && slotItem.golemLayerLossReflect > 0) {
-    const maxDur = slotItem.maxDurability ?? (slotItem.durability ?? 1);
-    const lostDur = maxDur - newDurability;
-    if (lostDur > 0) {
-      const baseReflectDmg = slotItem.golemLayerLossReflect * lostDur;
-      const reflectDmg = baseReflectDmg * (1 + overclockExtra);
-      if (overclockExtra > 0) overclockFiredHere = true;
-      const monsterTargets = flattenActiveRowSlots(state.activeCards).filter(
-        (c): c is GameCardData => Boolean(c && c.type === 'monster'),
-      );
-      if (monsterTargets.length > 0) {
-        const [target, rng3] = pickRandom(monsterTargets, rng);
-        rng = rng3;
-        golemReflectDamage = { targetId: target.id, damage: reflectDmg, slotId };
-        effects.push({
-          event: 'log:entry',
-          payload: {
-            type: 'equip',
-            message: `${slotItem.name} 反震：${slotItem.golemLayerLossReflect}×${lostDur}${overclockExtra > 0 ? `×${1 + overclockExtra}` : ''} = ${reflectDmg} 点伤害，命中 ${target.name}！`,
-          },
-        });
-        effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 反震！${reflectDmg} 伤害！` } });
-      }
-    }
-  }
-
-  // Monster/shield equipment armor refresh on durability tick (layer break):
+  // ---- Armor strip (always runs for monster/shield) ----
   // Each durability point represents one "armor layer". When a layer is consumed
   // (durability ticks down via attacks, weapon strikes, or shield blocks), the
   // next layer must start with a fresh `armor` pool — same trick as
@@ -1329,12 +1272,5 @@ export function computeDurabilityLossEffects(
   void _strippedArmor;
   updatedItem = { ...(armorStrippedItem as GameCardData), durability: preservedDurability ?? newDurability };
 
-  if (overclockFiredHere) {
-    effects.push({
-      event: 'combat:equipOverclockTriggered',
-      payload: { surface: 'durability', count: overclockExtra },
-    });
-  }
-
-  return { updatedItem, patch, sideEffects: effects, golemReflectDamage, rng };
+  return { updatedItem, patch, sideEffects, golemReflectDamage, rng };
 }
