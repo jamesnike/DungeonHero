@@ -453,6 +453,33 @@ export function endHeroTurnPatch(
     }
   });
 
+  // Dragon scales (龙鳞): for every engaged monster carrying
+  // `dragonAttackNoLayerCost`, latch `dragonNoLayerCostActive` to whether the
+  // dragon lost a layer during the hero turn we are currently ending. The
+  // flag is read at attack time by `reduceDecrementFury` (`rules/combat.ts`),
+  // which skips the layer cost — and we deliberately DO NOT clear the flag
+  // there. Lifecycle is owned entirely by this end-of-hero-turn re-evaluation:
+  //   • lost a layer this hero turn  → flag = true  (next monster turn free)
+  //   • did NOT lose a layer         → flag = false (next monster turn pays)
+  // This means a multi-attack monster turn (e.g. future double-attack elite)
+  // gets all of its attacks free if and only if the previous hero turn dealt
+  // a layer of damage to the dragon — matches "上 hero 回合掉过血层 → 本次 (=
+  // 整个 monster 回合) 攻击不消耗血层" rather than "first attack only".
+  // Done as a SEPARATE loop because the elite dragon (`eliteHealOtherMonster`)
+  // can `return` early from the loop above — folding this in there would
+  // silently skip flag updates for elite dragons.
+  engagedMonsters.forEach(monster => {
+    if (!monster.dragonAttackNoLayerCost) return;
+    const idx = newActiveCards.findIndex(c => c?.id === monster.id);
+    if (idx < 0) return;
+    // Use the latest version (eliteHealOtherMonster above may have rewritten
+    // this slot; we want to layer our flag update on top of that, not lose it).
+    const live = newActiveCards[idx]!;
+    const lostLayer = heroTurnLayerLossIds.has(monster.id);
+    if ((live.dragonNoLayerCostActive ?? false) === lostLayer) return;
+    newActiveCards[idx] = { ...live, dragonNoLayerCostActive: lostLayer };
+  });
+
   const sortedMonsters = [...engagedMonsters].sort((a, b) => {
     const idxA = state.activeCards.findIndex(c => c?.id === a.id);
     const idxB = state.activeCards.findIndex(c => c?.id === b.id);

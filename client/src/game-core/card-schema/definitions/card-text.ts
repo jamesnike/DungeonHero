@@ -294,14 +294,32 @@ const persuadeDiscount: CardTextFormatter = (card) => {
   };
 };
 
-// 紧急回收 (knight:recall-equipment, knight class card) — handler-less, covered by Phase 1.
-// Always draws regardless of level (`classCard: true` short-circuits the level gate),
-// so the formatter currently produces the same text at every level.
-const knightRecallEquipment: CardTextFormatter = () => ({
-  description: '永久：失去 2 点生命，回手一张牌，抽 1 张牌。',
-  shortDescription: '失去 2 生命，回手 1 张，抽 1 张',
-  magicEffect: '失去 2 HP，回手一张牌，抽 1 张牌。',
-});
+// 紧急回收 (knight:recall-equipment, knight class card) —
+// L0：失去 2 HP，回手 1 张，抽 1 张。
+// L1：hpCost 收紧到 1，背包抽 2 张。
+// L2：数值同 L1，且卡自身刻上「置顶」flag（由 OnUpgradeHandler 设
+//     `topOnRecycleRestore: true`；卡面右下角自动渲染「置顶」角标，无需在描述
+//     文案里重复——避免和别处的「置顶」卡（专属感召）说法不一致）。
+//
+// 注意：starter 版（回收术）共用同一 knightEffect，但 maxUpgradeLevel: 1，
+// 走到不了 L2；它的 hpCost / draw 由 resolver 按 classCard + upgradeLevel
+// 单独 gate，formatter 这里不需要为 starter 分支额外出力（starter 有自己的
+// formatter 路由——starter:recallEquip）。
+const knightRecallEquipment: CardTextFormatter = (card) => {
+  const level = card.upgradeLevel ?? 0;
+  if (level >= 1) {
+    return {
+      description: '永久：失去 1 点生命，回手一张牌，抽 2 张牌。',
+      shortDescription: '失去 1 生命，回手 1 张，抽 2 张',
+      magicEffect: '失去 1 HP，回手一张牌，抽 2 张牌。',
+    };
+  }
+  return {
+    description: '永久：失去 2 点生命，回手一张牌，抽 1 张牌。',
+    shortDescription: '失去 2 生命，回手 1 张，抽 1 张',
+    magicEffect: '失去 2 HP，回手一张牌，抽 1 张牌。',
+  };
+};
 
 // 查阅动作 (starter:starter-perm-survey-action) — handler-less, covered by Phase 1.
 // On-enter-hand resolver picks `[1, 2][upgradeLevel]` for the temp-attack buff.

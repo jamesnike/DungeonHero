@@ -81,10 +81,11 @@ describe('card text formatter — handler-less cards refresh description on upgr
   });
 
   describe('紧急回收 (knight:recall-equipment, knight class card)', () => {
-    // Knight class 紧急回收 always draws (`classCard: true` short-circuit), so
-    // the formatter currently produces the same text at every level. The
-    // assertion locks the text in place so any future level-dependent change
-    // surfaces here as an intentional update rather than a silent regression.
+    // Knight class 紧急回收 now scales numerically with upgrade:
+    //   L0: 失去 2 HP，抽 1 张
+    //   L1: 失去 1 HP，抽 2 张（formatter rewrites text）
+    //   L2: 数值同 L1；formatter 不再改文案，OnUpgradeHandler 在卡上盖
+    //       `topOnRecycleRestore: true` flag（角标在 GameCard 自动渲染，不进描述）。
     const baseCard: GameCardData = {
       id: 'knight-recall-equipment-1',
       type: 'magic',
@@ -99,25 +100,29 @@ describe('card text formatter — handler-less cards refresh description on upgr
       maxUpgradeLevel: 2,
     } as GameCardData;
 
-    it('Lv 1: text remains the canonical "失去 2 生命，回手 1 张，抽 1 张"', () => {
+    it('Lv 1: text rewrites to "失去 1 生命，回手 1 张，抽 2 张"', () => {
       const initial = makeStateWithHandCard(baseCard);
       const after = upgradeNTimes(initial, baseCard.id, 1);
       const upgraded = findHandCard(after, baseCard.id);
 
       expect(upgraded.upgradeLevel).toBe(1);
-      expect(upgraded.description).toBe('永久：失去 2 点生命，回手一张牌，抽 1 张牌。');
-      expect(upgraded.shortDescription).toBe('失去 2 生命，回手 1 张，抽 1 张');
-      expect(upgraded.magicEffect).toBe('失去 2 HP，回手一张牌，抽 1 张牌。');
+      expect(upgraded.description).toBe('永久：失去 1 点生命，回手一张牌，抽 2 张牌。');
+      expect(upgraded.shortDescription).toBe('失去 1 生命，回手 1 张，抽 2 张');
+      expect(upgraded.magicEffect).toBe('失去 1 HP，回手一张牌，抽 2 张牌。');
+      // L1 还没盖 置顶 戳
+      expect((upgraded as any).topOnRecycleRestore).not.toBe(true);
     });
 
-    it('Lv 2: same canonical text', () => {
+    it('Lv 2: text stays at Lv 1 数值（1 HP / 2 抽）；卡自身刻上 topOnRecycleRestore', () => {
       const initial = makeStateWithHandCard(baseCard);
       const after = upgradeNTimes(initial, baseCard.id, 2);
       const upgraded = findHandCard(after, baseCard.id);
 
       expect(upgraded.upgradeLevel).toBe(2);
-      expect(upgraded.description).toBe('永久：失去 2 点生命，回手一张牌，抽 1 张牌。');
-      expect(upgraded.shortDescription).toBe('失去 2 生命，回手 1 张，抽 1 张');
+      expect(upgraded.description).toBe('永久：失去 1 点生命，回手一张牌，抽 2 张牌。');
+      expect(upgraded.shortDescription).toBe('失去 1 生命，回手 1 张，抽 2 张');
+      expect(upgraded.magicEffect).toBe('失去 1 HP，回手一张牌，抽 2 张牌。');
+      expect((upgraded as any).topOnRecycleRestore).toBe(true);
     });
   });
 

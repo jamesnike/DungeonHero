@@ -252,6 +252,25 @@ const persuadeGrantRecycleFetch: OnUpgradeHandler = noopUpgrade;
 
 const graveyardRecall: OnUpgradeHandler = noopUpgrade;
 const monsterRecruit: OnUpgradeHandler = noopUpgrade;
+
+// 紧急回收 (knight:recall-equipment, classCard)：
+//   L0 → L1: 数值收紧——hpCost 2 → 1，背包抽 1 → 2（由 resolver 按 upgradeLevel 计算，
+//            handler 不动 state，文案由 formatter 输出）。
+//   L1 → L2: 数值不变；卡自身刻上 `topOnRecycleRestore: true`，让这张卡 play 后进回收袋
+//            再洗回背包时**确定性落到背包第 1 格**，并在抽背包时被优先抽到。
+//            这条 flag 跟着卡走（cardHasPermFlag 视为 Perm，因为 magicType: 'permanent'），
+//            消费方在 `cards.ts` 的 `processRecycleBag` + `drawFromBackpackToHandPure`/
+//            `drawMultipleFromBackpack` 已统一处理，handler 只负责盖戳。
+// 注意：starter 版（回收术）共用同一 knightEffect 但不带 classCard——它的
+//   maxUpgradeLevel: 1 也不会走到 L2 分支；resolver 内 drawCount 仍 gate 在
+//   `card.classCard === true`，starter 永远 0 抽，与卡面文案一致。
+const recallEquipment: OnUpgradeHandler = (upgraded, newLevel) => {
+  if (newLevel >= 2) {
+    upgraded.topOnRecycleRestore = true;
+  } else {
+    delete (upgraded as any).topOnRecycleRestore;
+  }
+};
 const bloodGreed: OnUpgradeHandler = noopUpgrade;
 const armorStrike: OnUpgradeHandler = noopUpgrade;
 const armorDoubleStrike: OnUpgradeHandler = noopUpgrade;
@@ -737,6 +756,7 @@ registerOnUpgradeAll([
   // Knight effects
   { id: 'knight:graveyard-recall', handler: graveyardRecall },
   { id: 'knight:monster-recruit', handler: monsterRecruit },
+  { id: 'knight:recall-equipment', handler: recallEquipment },
   { id: 'knight:blood-greed', handler: bloodGreed },
   { id: 'knight:armor-strike', handler: armorStrike },
   { id: 'knight:armor-double-strike', handler: armorDoubleStrike },

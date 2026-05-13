@@ -3329,7 +3329,17 @@ export function resolveKnightPermanentMagic(
         banner(sideEffects, '没有可回手的装备或护符。');
         return applyPatch(state, patch, sideEffects);
       }
-      const hpCost = 2;
+      // 紧急回收 升级缩放（仅 knight class 版 / classCard: true 走升级；
+      // starter 版「回收术」走 starter:{id} 路由，maxUpgradeLevel: 1 且不进 L2 分支）：
+      //   L0: hpCost 2, draws 1
+      //   L1: hpCost 1, draws 2
+      //   L2: hpCost 1, draws 2（+ 卡自身已带 topOnRecycleRestore，由 handler 在升级时盖戳）
+      // starter 版仍按旧契约：starter 卡面只写「失去 2 HP，回手一张牌」，不抽牌。
+      const upgradeLevel = (card.upgradeLevel ?? 0) as number;
+      const isClass = card.classCard === true;
+      const hpCost = isClass && upgradeLevel >= 1 ? 1 : 2;
+      const drawCount = isClass ? (upgradeLevel >= 1 ? 2 : 1) : 0;
+      const drawsExtra = drawCount > 0;
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: hpCost, source: 'recall-equipment', selfInflicted: true });
 
       type RecallOption = { id: string; label: string; description: string; slotType: string };
@@ -3351,10 +3361,6 @@ export function resolveKnightPermanentMagic(
         options.push({ id: 'amulet', label: `护符栏 — ${topAmulet.name}`, description: '最上层护符', slotType: 'amulet' });
       }
 
-      // 「抽 1 张牌」是 knight 班级版 (`紧急回收`, `classCard: true`) 独占的奖励；
-      // starter 版 (`回收术`) 卡面只写「失去 2 HP，回手一张牌」，不抽牌。
-      const drawsExtra = card.classCard === true;
-
       if (options.length === 1) {
         const chosen = options[0];
         if (chosen.slotType === 'equipment') {
@@ -3370,10 +3376,10 @@ export function resolveKnightPermanentMagic(
           patch.handCards = [...state.handCards, sanitizeCardMetadata(topAmulet)];
         }
         if (drawsExtra) {
-          enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
+          enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: drawCount } as GameAction);
         }
         const itemName = options[0].label.split(' — ')[1] ?? '装备';
-        const drawSuffix = drawsExtra ? '，抽 1 张牌' : '';
+        const drawSuffix = drawsExtra ? `，抽 ${drawCount} 张牌` : '';
         banner(sideEffects, `${card.name}：失去 ${hpCost} HP，${itemName} 已回到手牌${drawSuffix}！`);
         log(sideEffects, 'magic', `${card.name}：失去 ${hpCost} HP，${itemName} 回到手牌${drawSuffix}`);
         patch.lastPlayedCardCategory = getCardPlayCategory(card);
@@ -3386,7 +3392,7 @@ export function resolveKnightPermanentMagic(
         effect: 'recall-equipment',
         step: 'slot-select',
         prompt: '选择一个位置，将装备/护符回收到手牌。',
-        data: { options, hpCost },
+        data: { options, hpCost, drawCount },
         echoRemaining: echoMultiplier,
       } as any;
       patch.heroSkillBanner = `${card.name}：选择一个位置回手。`;
@@ -5464,14 +5470,18 @@ export function resolvePendingMagic(
             patch.handCards = [...state.handCards, sanitizeCardMetadata(topAmulet)];
           }
         }
-        // 「抽 1 张牌」是 knight 班级版 (`紧急回收`, `classCard: true`) 独占的奖励；
-        // starter 版 (`回收术`) 卡面只写「失去 2 HP，回手一张牌」，不抽牌。
-        const drawsExtra = card.classCard === true;
+        // 升级缩放：drawCount 在 setup 阶段（按 card.upgradeLevel + classCard）已写入
+        // `data.drawCount`；旧 pendingMagicAction（无 drawCount 字段，例如老存档）
+        // fallback 到「classCard ? 1 : 0」以保留旧契约。
+        const isClass = card.classCard === true;
+        const fallbackDraws = isClass ? 1 : 0;
+        const drawCount = typeof data.drawCount === 'number' ? data.drawCount : fallbackDraws;
+        const drawsExtra = drawCount > 0;
         if (drawsExtra) {
-          enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
+          enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: drawCount } as GameAction);
         }
         const itemName = chosen.label?.split(' — ')[1] ?? '装备';
-        const drawSuffix = drawsExtra ? '，抽 1 张牌' : '';
+        const drawSuffix = drawsExtra ? `，抽 ${drawCount} 张牌` : '';
         banner(sideEffects, `${card.name}：失去 ${hpCost} HP，${itemName} 已回到手牌${drawSuffix}！`);
         log(sideEffects, 'magic', `${card.name}：失去 ${hpCost} HP，${itemName} 回到手牌${drawSuffix}`);
         patch.pendingMagicAction = null;

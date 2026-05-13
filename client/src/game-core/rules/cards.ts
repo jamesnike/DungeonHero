@@ -1867,7 +1867,11 @@ function reduceDisposeEquipmentCard(
     if (newMaxDur <= 0) {
       sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `残骸回收符：${card.name} 耐久上限归零，从游戏中移除！` } });
       sideEffects.push({ event: 'ui:banner', payload: { text: `${card.name} 耐久上限归零，移除！` } });
-      return applyPatch(state, patch, sideEffects);
+      // IMPORTANT: pass `enqueuedActions` (NOT dropped) so any follow-up
+      // actions enqueued by `triggerLastWords`-fired
+      // `computeEquipmentDisplacementLastWords` (line 1835) survive — see
+      // the parallel `salvaged` early-return below for the full bug history.
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
     const { fromSlot: _, armor: _a, armorBonusDamaged: _b, reviveUsed: _c, equipmentReviveUsed: _d, wraithRebirthUsed: _e, ...rest } = card as any;
     const salvaged: GameCardData = { ...rest, durability: 1, maxDurability: newMaxDur };
@@ -1882,7 +1886,24 @@ function reduceDisposeEquipmentCard(
     // clobbered. Mirror equipment-effects.ts:computeEquipmentBreakEffects
     // (lines 909-913 comment) which already uses this pattern.
     patch.handCards = [...(patch.handCards ?? state.handCards), salvaged];
-    return applyPatch(state, patch, sideEffects);
+    // IMPORTANT: pass `enqueuedActions` (NOT dropped) so any follow-up
+    // actions enqueued by `computeEquipmentDisplacementLastWords` survive:
+    //   - `ADD_TO_RECYCLE_BAG` for `graveyard-to-hand` /
+    //     `graveyard-event-to-hand` picks that overflowed a near-full hand
+    //   - `DRAW_CARDS` (drawFromBackpack) / `DRAW_CLASS_TO_BACKPACK`
+    //     queued at lines 1841-1846 for monster-as-equipment lastWords
+    //     (`discard-hand-3` / `skeletonLastWordsDiscard`)
+    //   - `TRIGGER_MONSTER_SKILL_FLOAT` skill float UI events
+    //
+    // Real bug this caused: 墓园守卫 (Perm) + 残骸回收符 + Iron Shield
+    // (graveyard-to-hand) + wooden shield 顶替 → 墓园守卫 doubled the
+    // graveyard-to-hand trigger, the second pick overflowed a near-full
+    // hand and was supposed to route to the recycle bag via
+    // `ADD_TO_RECYCLE_BAG`, but the dropped enqueuedActions made the
+    // picked card vanish entirely. User-visible: only 1 card landed in
+    // hand instead of expected 2 (one in hand, one in recycle bag), and
+    // the missing card disappeared from grave with no visible destination.
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
   const toRecycleBag = isPermRecycle;
