@@ -2142,6 +2142,9 @@ const knightDeckJudgeDelete: CardDefinition = {
 //      recycle-bag dispatch (matches Shop kw='delete' semantics).
 //   3) Chain N class-card discoveries where N = number of cards deleted
 //      (BEGIN_DISCOVER + pendingClassDiscoverQueue, mirrors discard-rebuild).
+//      All discovered cards use `delivery: 'hand-first'` — they land directly
+//      in hand (subject to handLimit, falling back to backpack → recycle bag
+//      on overflow). Mirrors 「专属感召」 (starter-discover-class-to-hand) UX.
 // Echo: NOT participating. `echoMultiplier` ignored; isEchoTriggered just
 // adds a banner note. `doubleNextMagic` is still consumed by the engine.
 const knightForgeReborn: CardDefinition = {

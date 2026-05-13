@@ -480,30 +480,22 @@ export default function GameBoard() {
   const combatAsyncEpochRef = useRef(0);
   // amuletSlotsRef eliminated — use engine.getState().amuletSlots in closures
 
-  // When slotTempArmor increases, repair shield base armor up to armorMax
-  const prevSlotTempArmorRef = useRef(slotTempArmor);
-  useLayoutEffect(() => {
-    const prev = prevSlotTempArmorRef.current;
-    for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as const) {
-      const oldTemp = prev[slotId] ?? 0;
-      const newTemp = slotTempArmor[slotId] ?? 0;
-      if (newTemp > oldTemp) {
-        const increase = newTemp - oldTemp;
-        const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-        if (slotItem && (slotItem.type === 'shield' || slotItem.type === 'monster')) {
-          const baseArmorMax = slotItem.type === 'monster'
-            ? (slotItem.hp ?? slotItem.value)
-            : (slotItem.armorMax ?? slotItem.value);
-          const currentArmor = slotItem.armor ?? baseArmorMax;
-          if (currentArmor < baseArmorMax) {
-            const repair = Math.min(increase, baseArmorMax - currentArmor);
-            dispatch({ type: 'SET_EQUIPMENT_SLOT', slotId, card: { ...slotItem, armor: currentArmor + repair } as EquipmentItem });
-          }
-        }
-      }
-    }
-    prevSlotTempArmorRef.current = slotTempArmor;
-  }, [slotTempArmor, equipmentSlot1, equipmentSlot2]);
+  // NOTE: a legacy useLayoutEffect previously lived here that, when
+  // `slotTempArmor` increased, dispatched `SET_EQUIPMENT_SLOT` to "repair"
+  // the shield's base armor up to `armorMax`. That effect was a holdover
+  // from the OLD two-counter armor model and is now obsolete:
+  //   1. Every reducer path that increases `slotTempArmor` already calls
+  //      `applySlotArmorBonusDelta` (see equipment.ts and rule files),
+  //      which bumps the live `armor` by exactly the delta within the new
+  //      cap — the canonical single-counter behavior.
+  //   2. The legacy effect double-applied the delta AND then triggered
+  //      `SET_EQUIPMENT_SLOT`, whose reducer calls `refillSlotArmorToCap`,
+  //      overriding the freshly-correct armor value to the FULL cap
+  //      (base + perm + temp). User scenario: amplified Iron Shield
+  //      (armorMax=8) at armor=4 with perm shield +1, casting 攻防协律
+  //      (+2 temp armor) → reducer correctly produces armor=6, then the
+  //      legacy effect rewrote it to cap=11. Removed. See rule
+  //      shield-armor-vs-durability.mdc for the canonical model.
 
   useLayoutEffect(() => {
     const el = headerWrapperRef.current;

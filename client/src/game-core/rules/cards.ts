@@ -392,6 +392,7 @@ function reducePlayCard(
       tempArmor[targetSlot] = (tempArmor[targetSlot] ?? 0) + 3;
       patch.slotTempAttack = tempAttack;
       patch.slotTempArmor = tempArmor;
+      applySlotArmorBonusDelta(state, targetSlot, 3, patch);
       sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `铸锋药剂：${card.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！` } });
     }
 
@@ -976,6 +977,7 @@ function reduceEquipFromHand(
     tempArmor[slotId] = (tempArmor[slotId] ?? 0) + 3;
     patch.slotTempAttack = tempAttack;
     patch.slotTempArmor = tempArmor;
+    applySlotArmorBonusDelta(state, slotId, 3, patch);
     sideEffects.push({
       event: 'log:entry',
       payload: { type: 'equip', message: `铸锋药剂：${card.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！` },

@@ -2572,7 +2572,9 @@ export function resolveKnightInstantMagic(
       //      走 APPLY_DISCARD_EFFECTS（kw='delete' 语义，与 onDiscardDraw / catapult
       //      / discard-zap 解耦）。
       //   3) 链式发现 N 张专属牌（N = 被删张数）—— 复用 discard-rebuild 的
-      //      BEGIN_DISCOVER + pendingClassDiscoverQueue 模式。
+      //      BEGIN_DISCOVER + pendingClassDiscoverQueue 模式。**所有发现的牌
+      //      都以 `delivery: 'hand-first'` 直接进入手牌**（与 「专属感召」 一致），
+      //      hand 满了才回退到背包→回收袋。回炉重造刚清空手牌，几乎一定有空位。
       //
       // 法术回响：本卡 **不参与** 回响（结构性 + 永久副作用强，二次结算无可叠加
       // 的语义）。resolver 忽略 echoMultiplier；isEchoTriggered 时 banner 提示
@@ -2605,16 +2607,22 @@ export function resolveKnightInstantMagic(
       if (deleteCount > 0) {
         const classDeck = state.classDeck ?? [];
         if (classDeck.length > 0) {
+          // delivery: 'hand-first' — discovered cards land directly in hand
+          // (subject to handLimit), falling back to backpack → recycle bag on
+          // overflow. Mirrors 「专属感召」 (starter-discover-class-to-hand) UX:
+          // since 回炉重造 just emptied the hand, room is essentially guaranteed.
           enqueuedActions.push({
             type: 'BEGIN_DISCOVER',
             source: 'forge-reborn',
             pool: classDeck,
             sourceLabel: card.name,
+            delivery: 'hand-first',
           });
           if (deleteCount > 1) {
             const queueAddition = Array.from({ length: deleteCount - 1 }, () => ({
               source: 'forge-reborn' as const,
               sourceLabel: card.name,
+              delivery: 'hand-first' as const,
             }));
             patch.pendingClassDiscoverQueue = [
               ...state.pendingClassDiscoverQueue,

@@ -1210,7 +1210,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
   // 含 Perm 牌）经 DELETE_CARD（destination: 'graveyard'）送入坟场——和 Shop
   // 「删除」(`kw='delete'`) 语义一致：绕过 perm-routing-on-discard 的回收袋分流，
   // 自然触发「招灵书印」(delete-draw amulet)、不触发 APPLY_DISCARD_EFFECTS。
-  // 然后按 N = 被删张数 链式发现等量专属牌（BEGIN_DISCOVER + pendingClassDiscoverQueue）。
+  // 然后按 N = 被删张数 链式发现等量专属牌（BEGIN_DISCOVER + pendingClassDiscoverQueue），
+  // 全部以 delivery: 'hand-first' 直接进入手牌（hand 满才回退到背包 → 回收袋）。
   // 不参与法术回响（resolver 忽略 echoMultiplier；isEchoTriggered 时 banner 提示
   // 「本卡不参与回响」，doubleNextMagic 仍被引擎前置消费）。
   pushCard({
@@ -1220,10 +1221,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: dedupeKnightMagicCleanseDrawImage,
     classCard: true,
     unique: true,
-    description: '一次性：失去 ⌊当前生命 ÷ 2⌋ 点生命，删除所有手牌（含诅咒，强制送入坟场），然后发现等量的专属牌。',
-    shortDescription: '失去半血；删除全部手牌；发现等量专属牌',
+    description: '一次性：失去 ⌊当前生命 ÷ 2⌋ 点生命，删除所有手牌（含诅咒，强制送入坟场），然后发现等量的专属牌（直接加入手牌）。',
+    shortDescription: '失去半血；删除全部手牌；发现等量专属牌进入手牌',
     magicType: 'instant',
-    magicEffect: '即时魔法：失去半血，删除手牌，发现等量专属牌。',
+    magicEffect: '即时魔法：失去半血，删除手牌，发现等量专属牌（直接进入手牌）。',
     knightEffect: 'forge-reborn',
   });
 

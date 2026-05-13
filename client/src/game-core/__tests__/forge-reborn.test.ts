@@ -9,6 +9,9 @@
  *     `perm-routing-on-discard` recycle-bag dispatch.
  *   - Trigger N chained class-deck discoveries (N = number of cards deleted).
  *     First fires via BEGIN_DISCOVER; remaining N-1 go to pendingClassDiscoverQueue.
+ *     All discoveries use delivery: 'hand-first' — discovered cards land
+ *     directly in hand (subject to handLimit, falling back to backpack →
+ *     recycle bag on overflow). Mirrors 「专属感召」 UX.
  *   - Empty-hand case: HP cost still paid, no discoveries, banner notes
  *     "无手牌可删除".
  *   - Echo: does NOT participate. echoMultiplier ignored. isEchoTriggered just
@@ -22,6 +25,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { reduce } from '../reducer';
 import { drain } from '../pipeline';
 import { createInitialGameState } from '../state';
 import type { GameState } from '../types';
@@ -150,20 +154,25 @@ describe('回炉重造 (knight:forge-reborn)', () => {
     expect(result.state.handCards.find(c => c.id === card.id)).toBeUndefined();
     expect(result.state.handCards.find(c => c.id === 'h-1')).toBeUndefined();
 
-    // First discover fires immediately.
+    // First discover fires immediately. delivery should be 'hand-first' so
+    // the chosen card lands directly in hand (mirrors 「专属感召」).
     expect(result.state.discoverModalOpen).toBe(true);
     expect(result.state.discoverOptions.length).toBeGreaterThan(0);
     expect(result.state.discoverSourceLabel).toBe('回炉重造');
+    expect(result.state.discoverDelivery).toBe('hand-first');
 
     // Remaining 2 discovers queued (3 hand cards → 3 discovers total, 1 fires + 2 queued).
+    // Each queue entry must also carry delivery: 'hand-first'.
     expect(result.state.pendingClassDiscoverQueue).toHaveLength(2);
     expect(result.state.pendingClassDiscoverQueue[0]).toEqual({
       source: 'forge-reborn',
       sourceLabel: '回炉重造',
+      delivery: 'hand-first',
     });
     expect(result.state.pendingClassDiscoverQueue[1]).toEqual({
       source: 'forge-reborn',
       sourceLabel: '回炉重造',
+      delivery: 'hand-first',
     });
   });
 
@@ -393,6 +402,45 @@ describe('回炉重造 (knight:forge-reborn)', () => {
     expect(result.state.discardedCards.some(c => c.id === card.id)).toBe(true);
     // Not in recycle bag (no Perm flag).
     expect(result.state.permanentMagicRecycleBag.some(c => c.id === card.id)).toBe(false);
+  });
+
+  it("end-to-end: RESOLVE_DISCOVER_SELECTION after forge-reborn lands chosen card in hand (delivery: 'hand-first')", () => {
+    const card = makeForgeReborn('e2e-hand');
+    const c1 = makeHandCard('h-1');
+    const c2 = makeHandCard('h-2');
+    const cd1 = makeClassCard('cd-1');
+    const cd2 = makeClassCard('cd-2');
+    const cd3 = makeClassCard('cd-3');
+    const state = makeState({
+      hp: 20,
+      handCards: [card, c1, c2],
+      classDeck: [cd1, cd2, cd3],
+    });
+
+    const after = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Modal is open with delivery='hand-first' and hand is empty (just got purged).
+    expect(after.state.discoverModalOpen).toBe(true);
+    expect(after.state.discoverDelivery).toBe('hand-first');
+    expect(after.state.handCards.length).toBe(0);
+    expect(after.state.discoverOptions.length).toBeGreaterThan(0);
+
+    // Player picks the first option → it should land directly in hand.
+    const chosen = after.state.discoverOptions[0];
+    const resolved = reduce(after.state, {
+      type: 'RESOLVE_DISCOVER_SELECTION',
+      cardId: chosen.id,
+    });
+
+    expect(resolved.state.handCards.length).toBe(1);
+    expect(resolved.state.handCards[0].name).toBe(chosen.name);
+    // Cloned id, not original.
+    expect(resolved.state.handCards[0].id).not.toBe(chosen.id);
+    // Did NOT go to backpack or recycle bag.
+    expect(resolved.state.backpackItems.length).toBe(0);
+    expect(resolved.state.permanentMagicRecycleBag.length).toBe(0);
+    // discoverDelivery resets to default after resolution.
+    expect(resolved.state.discoverDelivery).toBe('backpack');
   });
 
   it('classDeck empty: HP cost paid, hand still deleted, but no discover fires (log notes empty pool)', () => {

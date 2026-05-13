@@ -202,4 +202,43 @@ describe('攻防协律 主效果: slot-select → +N 临攻/+N 临护 + 抽 1', 
     ]);
     expect(result.state.pendingMagicAction).toBeNull();
   });
+
+  // Regression: user's exact scenario via PLAY_CARD chain.
+  // Main-deck Iron Shield (value=3 base), amplified to armorMax=8,
+  // equipmentSlotBonuses.shield = 1 (perm shield bonus),
+  // armor=4 (damaged), use 攻防协律 Lv0 (+2/+2).
+  // Expected after: armor=6, cap=8+1+2=11, displayed as "6/11".
+  // User-reported bug: armor displayed as 11 (i.e., armor was refilled to cap).
+  it('user scenario: main-deck Iron Shield amplified to 8, perm+1, armor=4 → +2 armor (not refilled)', () => {
+    const card = makeCard('user-scenario');
+    const ironShield = {
+      id: 'iron-main-1',
+      type: 'shield' as const,
+      name: 'Iron Shield',
+      value: 8,
+      image: '',
+      armor: 4,
+      armorMax: 8,
+      durability: 2,
+      maxDurability: 2,
+      onDestroyEffect: 'graveyard-to-hand',
+      amplifyBonus: 5,
+    };
+    const state = makeState({
+      handCards: [card],
+      backpackItems: [makeBackpackCard('bp-user')],
+      equipmentSlot1: ironShield as any,
+      equipmentSlotBonuses: {
+        equipmentSlot1: { damage: 0, shield: 1 },
+        equipmentSlot2: { damage: 0, shield: 0 },
+      },
+      pendingMagicAction: { card, effect: 'temp-attack-armor-draw', step: 'slot-select', prompt: '...' } as any,
+    });
+    const result = drain(state, [
+      { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'temp-attack-armor-draw', slotId: 'equipmentSlot1' } as GameAction,
+    ]);
+    expect(result.state.slotTempArmor?.equipmentSlot1).toBe(2);
+    expect((result.state.equipmentSlot1 as any)?.armor).toBe(6);
+    expect((result.state.equipmentSlot1 as any)?.armorMax).toBe(8);
+  });
 });
