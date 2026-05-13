@@ -1015,11 +1015,16 @@ export function computeEquipmentBreakEffects(
       accumulateMineDamageBoost(state, slotItem, finalDurLost, patch, effects);
     }
 
-    // 残骸回收符 (equipment-salvage amulet): for weapons/shields, return the broken
-    // card to hand with maxDurability-N instead of being lost (N = number of
-    // equipped salvage amulets — every amulet independently triggers a save,
-    // and each save costs one durability point). If maxDur reaches 0 the card
-    // is removed from the game entirely.
+    // 残骸回收符 (equipment-salvage amulet): return the broken card to hand with
+    // maxDurability-N instead of being lost (N = number of equipped salvage
+    // amulets — every amulet independently triggers a save, and each save costs
+    // one durability point). If maxDur reaches 0 the card is removed from the
+    // game entirely.
+    //
+    // 适用范围：weapon / shield / monster 装备都支持（怪物装备的 maxDurability
+    // = 血层上限）。怪物盾的 salvage 通过 `salvageReduction` 字段持久化——
+    // 即使被打死进坟场后再被拉回来，cap 仍保持减少。详见
+    // `applyMonsterRage` (`client/src/lib/monsterRage.ts`) 的 cap 处理。
     //
     // Perm-priority rule: equipment carrying a Perm flag (永恒铭刻 etc.) must
     // route to the recycle bag. Salvage is SKIPPED for Perm equipment so the
@@ -1028,19 +1033,45 @@ export function computeEquipmentBreakEffects(
     const salvageCount = amuletEffects.equipmentSalvageCount;
     const canSalvage = !isPermRecycle
       && salvageCount > 0
-      && (slotItem.type === 'weapon' || slotItem.type === 'shield');
+      && (slotItem.type === 'weapon' || slotItem.type === 'shield' || slotItem.type === 'monster');
 
-    // Wraith swap (50% chance to move other slot's item to this slot) — monster-only,
-    // mutually exclusive with salvage which only applies to weapon/shield.
+    // Wraith swap (50% chance to move other slot's item to this slot) — monster-only.
+    // 跟 salvage 共存：先做 wraith 50% 判定，无论结果如何 salvage 都另外应用。
+    // 成功的话对面槽位的 item 飞到这里；然后 salvage 再把 broken 怪物卡 rescue
+    // 回手牌（如果 newMaxDur > 0）。
     let wraithSwapSuccess = false;
     if (isMonsterEquip && slotItem.lastWords?.startsWith('wraith-haunt') && otherItem) {
       [wraithSwapSuccess, rng] = nextBool(rng);
     }
 
+    // Step A: Apply wraith swap independently of salvage.
+    // 成功时：对面 item 移到本槽，对面槽 reserve promote 上来。
+    if (wraithSwapSuccess && otherItem) {
+      patch[slotId] = { ...otherItem, fromSlot: slotId } as EquipmentItem;
+      // The OTHER slot lost its main to the swap — if its reserve has cards,
+      // promote the topmost up to fill the now-empty other slot. Without this
+      // promote, a reserve under the swapped-away item silently disappeared
+      // visually (still in state, but EquipmentSlot.tsx won't render the
+      // reserve stack when main is null).
+      clearSlotAndPromoteReserve(state, otherSlotId, patch);
+      wraithSwapTarget = otherSlotId;
+      effects.push({
+        event: 'log:entry',
+        payload: { type: 'equip', message: `幽魂作祟：${otherItem.name} 被移到了${slotLabel(slotId)}装备栏！` },
+      });
+      effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId: otherSlotId } });
+    }
+
+    // Step B: Handle the broken card itself — salvage to hand vs route to grave/recycle.
     if (canSalvage) {
+      // If wraith swap happened, our slot is already occupied by `otherItem` —
+      // skip the slot clear (otherwise we'd wipe the swapped-in item too).
+      // No swap → clear our slot like normal (reserve promotes up).
+      if (!wraithSwapSuccess) {
+        clearSlotAndPromoteReserve(state, slotId, patch);
+        effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId } });
+      }
       const newMaxDur = (slotItem.maxDurability ?? 1) - salvageCount;
-      clearSlotAndPromoteReserve(state, slotId, patch);
-      effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId } });
       if (newMaxDur <= 0) {
         effects.push({
           event: 'log:entry',
@@ -1056,7 +1087,33 @@ export function computeEquipmentBreakEffects(
           wraithRebirthUsed: _wru,
           ...rest
         } = slotItem as GameCardData & Record<string, unknown>;
-        const salvaged: GameCardData = { ...(rest as GameCardData), durability: 1, maxDurability: newMaxDur };
+        const cleanedBase = rest as GameCardData;
+        let salvaged: GameCardData;
+        if (isMonsterEquip) {
+          // 怪物装备 salvage：除了刷新 durability/maxDurability，还要：
+          //   - 累加 salvageReduction（让 cap 减少持久化，详见
+          //     `applyMonsterRage` 与 `monster-prime-as-equipment-currentlayer.mdc`）
+          //   - 清掉战斗中累积的临时状态（mirror resetMonsterForGraveyard）
+          //   - 把 fury / hpLayers / currentLayer 同步到新 cap，让显示 / 复活
+          //     之前的查询都看到正确的"被削过的"血层数
+          const prevReduction = cleanedBase.salvageReduction ?? 0;
+          salvaged = {
+            ...cleanedBase,
+            tempAttackBoost: 0,
+            tempHpBoost: 0,
+            specialAttackBoost: 0,
+            lowGoldBuffActive: false,
+            skipNextMonsterTurn: undefined,
+            durability: 1,
+            maxDurability: newMaxDur,
+            currentLayer: 1,
+            fury: newMaxDur,
+            hpLayers: newMaxDur,
+            salvageReduction: prevReduction + salvageCount,
+          };
+        } else {
+          salvaged = { ...cleanedBase, durability: 1, maxDurability: newMaxDur };
+        }
         patch.handCards = [...(patch.handCards ?? state.handCards), salvaged];
         effects.push({ event: 'card:equipmentSalvaged', payload: { card: salvaged, slotHint: slotId } });
         effects.push({
@@ -1065,29 +1122,13 @@ export function computeEquipmentBreakEffects(
         });
         effects.push({ event: 'ui:banner', payload: { text: `残骸回收！${slotItem.name} 回到手牌！` } });
       }
-    } else if (wraithSwapSuccess && otherItem) {
-      patch[slotId] = { ...otherItem, fromSlot: slotId } as EquipmentItem;
-      // The OTHER slot lost its main to the swap — if its reserve has cards,
-      // promote the topmost up to fill the now-empty other slot. Without this
-      // promote, a reserve under the swapped-away item silently disappeared
-      // visually (still in state, but EquipmentSlot.tsx won't render the
-      // reserve stack when main is null).
-      clearSlotAndPromoteReserve(state, otherSlotId, patch);
-      wraithSwapTarget = otherSlotId;
-      effects.push({
-        event: 'log:entry',
-        payload: { type: 'equip', message: `幽魂作祟：${otherItem.name} 被移到了${slotLabel(slotId)}装备栏！` },
-      });
-      effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId: otherSlotId } });
-      // The destroyed wraith equipment itself still needs to be routed —
-      // its slot is now occupied by the swapped-in `otherItem`, but the
-      // dying wraith card must enter the graveyard (or recycle bag if Perm)
-      // exactly like any other broken equipment, otherwise it silently
-      // disappears from the game.
-      routeBrokenSelfToGraveOrRecycle(state, slotItem, isPermRecycle, patch, enqueuedActions);
     } else {
-      clearSlotAndPromoteReserve(state, slotId, patch);
-      effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId } });
+      // No salvage path: clear the broken slot (unless wraith swap already filled it),
+      // then route the broken card to its final destination.
+      if (!wraithSwapSuccess) {
+        clearSlotAndPromoteReserve(state, slotId, patch);
+        effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId } });
+      }
       // Route the broken equipment to its final destination:
       //   - Perm-flagged (永恒铭刻 / native permEquipment) → permanent magic
       //     recycle bag. MUST take priority — a Perm Iron Shield should come

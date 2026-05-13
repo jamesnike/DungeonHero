@@ -458,7 +458,13 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'balance': effects.balanceCount += 1; break;
       case 'life': effects.lifeOverkillBonus += 3; break;
       case 'catapult': effects.catapultCount += 1; break;
-      case 'flash': effects.flashCount += 1; break;
+      case 'flash':
+        // Aura: each equipped 闪光符 grants +1 extra attack per slot per turn
+        // AND subtracts 2 from `lifeOverkillBonus` (mirror of life amulet's
+        // +3, sharing the same field so they naturally cancel and stack).
+        effects.flashCount += 1;
+        effects.lifeOverkillBonus -= 2;
+        break;
       case 'strength': effects.strengthCount += 1; break;
       case 'dual-guard': effects.dualGuardCount += 1; break;
       case 'discard-zap': effects.discardShockCount += 1; break;
@@ -502,6 +508,7 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'last-words-extra-trigger': effects.lastWordsExtraTriggerCount += 1; break;
       case 'manual-recycle-draw': effects.manualRecycleDrawCount += 1; break;
       case 'mirror-copy-summon': effects.mirrorCopySummonCount += 1; break;
+      case 'soul-devour': effects.soulDevourCount += 1; break;
       // The following amulets are checked via direct amuletSlots.find/filter(...)
       // in their reducers; no aggregated count needed. Cases are listed for
       // documentation / completeness so they are recognised registered effects.

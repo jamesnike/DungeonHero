@@ -427,14 +427,12 @@ const armorStrike: CardTextFormatter = (card) => {
 
 const armorDoubleStrike: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
-  const pcts = [50, 75, 75];
-  const counts = [2, 2, 3];
+  const pcts = [50, 75, 100];
   const pct = pick(pcts, level);
-  const cnt = pick(counts, level);
   return {
-    description: `永久：选择一面护盾，对随机 ${cnt} 个怪物各造成 ${pct}% 护甲值的法术伤害，然后该护盾耐久 -1。`,
-    shortDescription: `${pct}% 护甲法伤随机 ${cnt} 怪；该盾耐久 -1`,
-    magicEffect: `护甲值 ${pct}% 伤害随机 ${cnt} 怪，盾耐久 -1。`,
+    description: `永久：选择一件护甲装备，对当前行所有怪物各造成 ${pct}% 护甲值的法术伤害，然后该装备耐久 -1。`,
+    shortDescription: `${pct}% 护甲法伤全场；该装备耐久 -1`,
+    magicEffect: `护甲值 ${pct}% 伤害全场，装备耐久 -1。`,
   };
 };
 

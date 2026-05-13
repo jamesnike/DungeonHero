@@ -266,6 +266,13 @@ export const applyMonsterRage = (card: GameCardData, turn: number): GameCardData
   const bonusHp = upgrade?.hpBonus ?? 0;
   const bleedBoost = card.specialAttackBoost ?? 0;
 
+  // 残骸回收符 (equipment-salvage) 对 monster 装备：每次 salvage 累计在
+  // `salvageReduction` 上，让最终 cap 永久 -N（即使经过坟场→复活也保留）。
+  // 用 `max(1, rage - reduction)` 兜底防止 cap 归零（已经归零的会在 salvage
+  // 路径里被「移除游戏」，不会走到这里）。
+  const salvageReduction = card.salvageReduction ?? 0;
+  const cappedRage = Math.max(1, rage - salvageReduction);
+
   const result: GameCardData = {
     ...card,
     baseAttack: baseAtk,
@@ -274,9 +281,9 @@ export const applyMonsterRage = (card: GameCardData, turn: number): GameCardData
     value: baseAtk + bonusAtk + bleedBoost,
     hp: baseHp + bonusHp,
     maxHp: baseHp + bonusHp,
-    fury: rage,
-    hpLayers: rage,
-    currentLayer: rage,
+    fury: cappedRage,
+    hpLayers: cappedRage,
+    currentLayer: cappedRage,
     rageTurn: normalizedTurn,
     upgradeLevel: effectiveLevel,
     maxUpgradeLevel: getUpgradeTierCount(monsterType),

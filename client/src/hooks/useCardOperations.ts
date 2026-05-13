@@ -374,7 +374,6 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       return {
         appliesTo: 'weapon',
         modifier,
-        flashCount: amuletEffects.flashCount,
       };
     }
 
@@ -421,7 +420,6 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         modifier,
         shieldModifier: effectiveShieldMod,
         permanentShieldBonus: effectiveShieldMod,
-        flashCount: amuletEffects.flashCount,
       };
     }
 

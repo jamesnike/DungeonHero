@@ -838,10 +838,7 @@ export function computeAttackDamage(params: AttackDamageParams): number {
     params.slotTempAttack,
   );
 
-  const preFinal = (params.isCrit ? baseDamage * 2 : baseDamage) * params.stunnedDoubleMultiplier;
-  return params.amuletEffects.flashCount > 0
-    ? Math.max(0, Math.floor(preFinal / Math.pow(2, params.amuletEffects.flashCount)))
-    : preFinal;
+  return (params.isCrit ? baseDamage * 2 : baseDamage) * params.stunnedDoubleMultiplier;
 }
 
 // ---------------------------------------------------------------------------

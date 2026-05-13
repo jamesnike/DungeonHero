@@ -95,11 +95,6 @@ export type EquipmentCardStatModifier = {
   modifier: number;
   shieldModifier?: number;
   permanentShieldBonus?: number;
-  /**
-   * Number of equipped 闪光符 amulets. Display divides effective attack by `2^flashCount`,
-   * matching combat resolution where each flash compounds independently.
-   */
-  flashCount?: number;
 };
 
 export type PotionEffectId =
@@ -197,7 +192,8 @@ export type AmuletEffectId =
   | 'last-words-extra-trigger'
   | 'kill-cell-mine'
   | 'manual-recycle-draw'
-  | 'mirror-copy-summon';
+  | 'mirror-copy-summon'
+  | 'soul-devour';
 
 export type AmuletAuraBonus = {
   attack?: number;
@@ -327,6 +323,20 @@ export interface GameCardData {
   // Equipment durability
   durability?: number; // Current durability for weapons/shields
   maxDurability?: number; // Maximum durability for weapons/shields
+  /**
+   * 残骸回收符（equipment-salvage amulet）累计减少的耐久上限。
+   *
+   * - 武器 / 盾：靠 `maxDurability` 直接持久（重置进坟场不会重新计算 max），
+   *   不需要这个字段。
+   * - 怪物装备：每次 salvage 累加这里。`applyMonsterRage` 在重新计算 fury /
+   *   hpLayers / currentLayer 时读取这个值，把 cap 钉到 `max(1, rage - reduction)`。
+   *   这样就算怪物之后被打死进坟场（resetMonsterForGraveyard 跑一次 rage 重算）
+   *   再被拉回来，salvage 减少的层数仍然保留。
+   *
+   * 设计参考：`.cursor/rules/monster-prime-as-equipment-currentlayer.mdc`
+   * 和 `.cursor/rules/monster-graveyard-layer-reset.mdc`。
+   */
+  salvageReduction?: number;
   armor?: number; // Current armor HP for shields (like monster hp)
   armorMax?: number; // Max armor HP per durability layer for shields (like monster maxHp)
   armorBonusDamaged?: number; // How much of the permanent shield bonus has been consumed by damage
@@ -1342,19 +1352,7 @@ const amuletEffectText =
     : 'select-none w-auto max-h-[82%] max-w-[82%] object-contain';
 
   const modSpacer = '';
-  const flashCountForDisplay = equipmentStatModifier?.flashCount ?? 0;
-  const isFlashHalveAttack =
-    flashCountForDisplay > 0 &&
-    (card.type === 'weapon' || card.type === 'monster') &&
-    (equipmentStatModifier?.appliesTo === 'weapon' || equipmentStatModifier?.appliesTo === 'monster');
-  const flashHalvedValue = isFlashHalveAttack
-    ? Math.max(
-        0,
-        Math.floor((card.value + (equipmentStatModifier?.modifier ?? 0)) / Math.pow(2, flashCountForDisplay)),
-      )
-    : null;
   const equipmentStatModifierText =
-    !isFlashHalveAttack &&
     equipmentStatModifier &&
     (card.type === 'weapon' || card.type === 'shield' || card.type === 'monster') &&
     equipmentStatModifier.appliesTo === card.type &&
@@ -1374,7 +1372,6 @@ const amuletEffectText =
       : null;
   const equipmentStatModifierColor = 'text-emerald-600';
   const equipmentModifierNum =
-    !isFlashHalveAttack &&
     equipmentStatModifier &&
     (card.type === 'weapon' || card.type === 'shield' || card.type === 'monster') &&
     equipmentStatModifier.appliesTo === card.type
@@ -2014,11 +2011,7 @@ const amuletEffectText =
                           </div>
                         )}
                         <div className="flex items-baseline gap-0">
-                          {flashHalvedValue != null ? (
-                            <span className="dh-card__stat font-black text-purple-700 drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
-                              {flashHalvedValue}
-                            </span>
-                          ) : isCompact ? (
+                          {isCompact ? (
                             <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
                               (monsterAttackModifier > 0 || equipmentModifierNum !== 0) ? 'text-orange-600' : 'text-black'
                             }`}>
@@ -2244,18 +2237,14 @@ const amuletEffectText =
                             );
                           })() : isCompact ? (
                             <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
-                              flashHalvedValue != null && card.type === 'weapon' ? 'text-purple-700'
-                              : equipmentModifierNum !== 0 ? 'text-emerald-600'
-                              : 'text-black'
+                              equipmentModifierNum !== 0 ? 'text-emerald-600' : 'text-black'
                             }`}>
-                              {flashHalvedValue != null && card.type === 'weapon'
-                                ? flashHalvedValue
-                                : card.value + equipmentModifierNum}
+                              {card.value + equipmentModifierNum}
                             </span>
                           ) : (
                             <>
-                              <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${flashHalvedValue != null && card.type === 'weapon' ? 'text-purple-700' : 'text-black'}`}>
-                                {flashHalvedValue != null && card.type === 'weapon' ? flashHalvedValue : card.value}
+                              <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
+                                {card.value}
                               </span>
                               {equipmentStatModifierText && (
                                 <span className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)] text-lg`}>

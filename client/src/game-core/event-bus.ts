@@ -145,7 +145,13 @@ export type GameEventMap = {
   'combat:goblinStolen': { target: unknown };
   'combat:goblinPersuadeAttempt': { slotId: string; monsterId: string; monsterName: string; itemName: string };
   'combat:daggerSelfDestructPrompt': { slotId: string; itemName: string; durability: number };
-  'combat:ghostBladeExile': {};
+  /**
+   * 触发「从坟场放逐 1 张卡」弹窗。复用 BEGIN_GHOST_BLADE_EXILE reducer +
+   * GraveyardExileModal —— 不同 source 的差别仅在 banner / log 文案上（用 sourceLabel 拼）。
+   *   - 'weapon': 武器攻击后（虚灵刀）
+   *   - 'amulet': 受到伤害后（灵魂吞噬）
+   */
+  'combat:ghostBladeExile': { source: 'weapon' | 'amulet'; sourceLabel: string };
   'combat:arcaneBladeSpell': { slotId: string; targetId: string };
   /** 魔弹风暴：序列化飞射动画，由 UI 按 delayMs 依次触发每一发射出 */
   'combat:missileStormSequence': {

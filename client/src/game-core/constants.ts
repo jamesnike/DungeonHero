@@ -197,6 +197,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   killCellMineCount: 0,
   manualRecycleDrawCount: 0,
   mirrorCopySummonCount: 0,
+  soulDevourCount: 0,
 });
 
 // ---------------------------------------------------------------------------

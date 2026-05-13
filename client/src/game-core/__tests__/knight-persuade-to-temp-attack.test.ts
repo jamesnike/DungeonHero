@@ -2,11 +2,15 @@
  * 辞剑相易 (knight:persuade-to-temp-attack) — Perm 1 magic.
  *
  * Behavior:
- *   - X = persuadeAmuletBonus           (temp; cleared)
- *       + persuadeDiscount.rateBonus    (temp; cleared — same semantics as
- *                                         PERSUADE_MONSTER auto-clearing
- *                                         persuadeDiscount)
- *       + permanentPersuadeBonus        (perm; NOT cleared)
+ *   - X mirrors the hero-card "下次劝降 +X%" sticker exactly:
+ *       X = persuadeAmuletBonus           (temp; cleared)
+ *         + persuadeDiscount.rateBonus    (temp; cleared — same semantics as
+ *                                           PERSUADE_MONSTER auto-clearing
+ *                                           persuadeDiscount)
+ *         + permanentPersuadeBonus        (perm; NOT cleared)
+ *         + (persuadeLevel - 1) * 5       (perm; NOT cleared — comes from
+ *                                           persuadeLevel+1 events like
+ *                                           威压交涉 / 永誓低吟 / 怀柔圣殿)
  *   - Per equipment slot += Math.ceil(X / 3) temp attack (slot1 + slot2 each)
  *   - "Cleared 临时部分":
  *       persuadeAmuletBonus → 0;
@@ -15,8 +19,9 @@
  *   - X = 0 on a pass: that pass fizzles (no temp attack added) but the card
  *     is still consumed normally.
  *   - Spell Echo (Category C, structural): runs `echoMultiplier` times.
- *     After pass 1, both temp parts are cleared, so pass 2's X = perm only.
- *     If perm > 0, pass 2 still adds another ceil(perm/3) per slot.
+ *     After pass 1, both temp parts are cleared, so pass 2's X = perm-only
+ *     contributors (permanentPersuadeBonus + (persuadeLevel - 1) * 5). If any
+ *     perm contributor > 0, pass 2 still adds another ceil(perm/3) per slot.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -232,6 +237,82 @@ describe('辞剑相易 — persuadeDiscount.rateBonus contributes to X and is cl
 });
 
 // ---------------------------------------------------------------------------
+// persuadeLevel contributes (persuadeLevel - 1) * 5 to X (permanent, never
+// cleared). Source: persuadeLevel+1 events such as 威压交涉 / 永誓低吟 / 怀柔圣殿.
+// This is the bug class reported by user "我有一个永久的 5% 劝降加成，用了这张牌
+// 后应该获得 ⌈5/3⌉ 的临时攻击，但是却没有获得" — pre-fix, the resolver only
+// summed three components and ignored persuadeLevel, so X = 0 → fizzle.
+// ---------------------------------------------------------------------------
+
+describe('辞剑相易 — persuadeLevel contributes (persuadeLevel - 1) * 5 to X', () => {
+  it('repro from bug report: persuadeLevel = 2 (UI shows +5%), all else 0 → ceil(5/3) = 2 per slot', () => {
+    const card = makePersuadeBladeCard('lv1');
+    const state = makeState({
+      handCards: [card] as any,
+      persuadeAmuletBonus: 0,
+      permanentPersuadeBonus: 0,
+      persuadeDiscount: null,
+      persuadeLevel: 2,
+    });
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(2);
+    expect(result.state.slotTempAttack?.equipmentSlot2).toBe(2);
+    // persuadeLevel is permanent — must NOT be touched.
+    expect(result.state.persuadeLevel).toBe(2);
+  });
+
+  it('persuadeLevel = 3 (UI shows +10%), all else 0 → ceil(10/3) = 4 per slot', () => {
+    const card = makePersuadeBladeCard('lv2');
+    const state = makeState({
+      handCards: [card] as any,
+      persuadeLevel: 3,
+    });
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(4);
+    expect(result.state.slotTempAttack?.equipmentSlot2).toBe(4);
+    expect(result.state.persuadeLevel).toBe(3);
+  });
+
+  it('persuadeLevel = 1 (default) contributes 0; with no other buffs → fizzle', () => {
+    const card = makePersuadeBladeCard('lv3');
+    const state = makeState({
+      handCards: [card] as any,
+      persuadeAmuletBonus: 0,
+      permanentPersuadeBonus: 0,
+      persuadeLevel: 1,
+      slotTempAttack: { equipmentSlot1: 0, equipmentSlot2: 0 },
+    });
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    expect(result.state.slotTempAttack?.equipmentSlot1 ?? 0).toBe(0);
+    expect(result.state.slotTempAttack?.equipmentSlot2 ?? 0).toBe(0);
+  });
+
+  it('all four contributors stack: amulet=4, discount.rateBonus=6, perm=8, level=2 → ceil(23/3)=8 per slot', () => {
+    const card = makePersuadeBladeCard('lv4');
+    const state = makeState({
+      handCards: [card] as any,
+      persuadeAmuletBonus: 4,
+      permanentPersuadeBonus: 8,
+      persuadeDiscount: { costReduction: 0, rateBonus: 6 },
+      persuadeLevel: 2,
+    });
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // X = 4 + 8 + 6 + (2-1)*5 = 23 → ceil(23/3) = 8
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(8);
+    expect(result.state.slotTempAttack?.equipmentSlot2).toBe(8);
+    // Temp parts cleared; perm parts (perm + level) preserved.
+    expect(result.state.persuadeAmuletBonus).toBe(0);
+    expect(result.state.persuadeDiscount?.rateBonus).toBe(0);
+    expect(result.state.permanentPersuadeBonus).toBe(8);
+    expect(result.state.persuadeLevel).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Spell Echo — Category C: runs N times; perm bonus may carry into pass 2
 // ---------------------------------------------------------------------------
 
@@ -315,6 +396,25 @@ describe('辞剑相易 法术回响 (Spell Echo, Category C)', () => {
     expect(result.state.slotTempAttack?.equipmentSlot2).toBe(12);
     expect(result.state.persuadeDiscount?.rateBonus).toBe(0);
     expect(result.state.permanentPersuadeBonus).toBe(6);
+  });
+
+  it('persuadeLevel = 2 only, doubleNextMagic → both passes use level bonus; per slot = ceil(5/3) * 2 = 4', () => {
+    const card = makePersuadeBladeCard('e7');
+    const state = makeState({
+      handCards: [card] as any,
+      persuadeAmuletBonus: 0,
+      permanentPersuadeBonus: 0,
+      persuadeLevel: 2,
+      doubleNextMagic: true,
+    });
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Pass 1: X = 0 + 0 + 0 + (2-1)*5 = 5 → ceil(5/3) = 2 per slot
+    // Pass 2: temp parts already 0; level still 2 → X = 5 → ceil(5/3) = 2 per slot
+    // Total per slot: 4
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(4);
+    expect(result.state.slotTempAttack?.equipmentSlot2).toBe(4);
+    expect(result.state.persuadeLevel).toBe(2);
   });
 
   it('echo banner mentions 回响×2 when doubleNextMagic active', () => {

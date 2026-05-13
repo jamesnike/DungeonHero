@@ -757,7 +757,12 @@ describe('弃装重铸 (knight:discard-rebuild)', () => {
     expect(result.state.discoverModalOpen).toBe(true);
   });
 
-  it('SALVAGE: monster equipment is NOT salvageable (only weapon/shield)', () => {
+  it('SALVAGE: monster equipment IS salvageable (parity with weapon/shield)', () => {
+    // 历史：早期 discard-rebuild 的 salvage 分支只收 weapon|shield，怪物装备会
+    // 直接进坟场（这里曾断言 `discardedCards.some(... 'mon-no-salv') === true`）。
+    // 现已对齐 `computeEquipmentBreakEffects` / `reduceDisposeEquipmentCard`：
+    // 怪物装备也按 maxDur-N 回手牌，并累加 salvageReduction 持久化 cap 减少。
+    // 详见 `equipment-salvage-monster.test.ts` 的 6. discard-rebuild + monster 块。
     const card = makeCard('salvage-mon');
     const monsterEquip: GameCardData = {
       id: 'mon-no-salv',
@@ -770,6 +775,8 @@ describe('弃装重铸 (knight:discard-rebuild)', () => {
       attack: 3,
       durability: 2,
       maxDurability: 2,
+      fury: 2,
+      hpLayers: 2,
       currentLayer: 1,
     } as GameCardData;
     const state = makeState({
@@ -782,9 +789,19 @@ describe('弃装重铸 (knight:discard-rebuild)', () => {
 
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-    // Monster equipment was destroyed normally (graveyard), salvage skipped.
-    expect(result.state.discardedCards.some(c => c.id === 'mon-no-salv')).toBe(true);
-    expect(result.state.handCards.some(c => c.id === 'mon-no-salv')).toBe(false);
+    // Slot cleared.
+    expect(result.state.equipmentSlot1).toBeNull();
+    // Did NOT enter graveyard — salvage rescued it.
+    expect(result.state.discardedCards.some(c => c.id === 'mon-no-salv')).toBe(false);
+    // IS in hand with reduced cap and salvageReduction tracked.
+    const salvaged = result.state.handCards.find(c => c.id === 'mon-no-salv');
+    expect(salvaged).toBeDefined();
+    expect((salvaged as any).type).toBe('monster');
+    expect((salvaged as any).maxDurability).toBe(1);
+    expect((salvaged as any).durability).toBe(1);
+    expect((salvaged as any).salvageReduction).toBe(1);
+    // Discover STILL fires (per design: 「每件装备发现 1 张专属牌」).
+    expect(result.state.discoverModalOpen).toBe(true);
   });
 
   it('SALVAGE + Perm equipment: salvage SKIPPED, Perm routes to recycle bag (Perm priority)', () => {

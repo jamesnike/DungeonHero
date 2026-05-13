@@ -100,6 +100,13 @@ export interface ShopHandlersDeps {
   >;
   graveyardDiscoverDeliveryRef: React.MutableRefObject<'backpack' | 'hand-first'>;
   ghostBladeExileResolverRef: React.MutableRefObject<(() => void) | null>;
+  /**
+   * 当前 ghost blade exile 弹窗的触发源（卡名）—— 用于 confirm 时拼 banner / log
+   * 文案。武器路径写「虚灵刀」、护符路径写「灵魂吞噬」。listener 触发
+   * triggerGhostBladeExile(sourceLabel) 时存进来；handleGhostBladeExileConfirm
+   * 读出来 + 用完清空。
+   */
+  ghostBladeExileSourceLabelRef: React.MutableRefObject<string>;
   /** 从专属发现弹窗完成时调用（药水「灵思药剂」等），替代 completeCurrentEvent */
   discoverPotionCompletionRef: React.MutableRefObject<((payload: { banner: string }) => void) | null>;
   onNewCardGainedRef: React.MutableRefObject<((count: number, source?: 'graveyard' | 'classPool') => void) | null>;
@@ -545,7 +552,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
   // -- Ghost blade exile ------------------------------------------------------
 
   const triggerGhostBladeExile = useCallback(
-    (): Promise<void> => {
+    (sourceLabel: string): Promise<void> => {
       const graveyard = depsRef.current.discardedCardsRef.current;
       const discoverIds = new Set((graveyardDiscoverState ?? []).map(c => c.id));
       const eligible = discoverIds.size > 0
@@ -553,6 +560,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         : graveyard;
       if (eligible.length === 0) return Promise.resolve();
 
+      depsRef.current.ghostBladeExileSourceLabelRef.current = sourceLabel;
       dispatch({ type: 'BEGIN_GHOST_BLADE_EXILE' });
 
       return new Promise<void>(resolve => {
@@ -564,6 +572,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
 
   const handleGhostBladeExileConfirm = useCallback(
     (selectedIds: string[]) => {
+      const sourceLabel = depsRef.current.ghostBladeExileSourceLabelRef.current || '虚灵刀';
       if (selectedIds.length > 0) {
         dispatch({ type: 'UPDATE_DISCARDED_CARDS', updater: prev => {
           const exileSet = new Set(selectedIds);
@@ -574,12 +583,13 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         const exiledNames = (ghostBladeExileCards ?? [])
           .filter(c => selectedIds.includes(c.id))
           .map(c => c.name);
-        depsRef.current.addGameLog('equip', `虚灵刀放逐：${exiledNames.join('、')} 被移除出游戏。`);
-        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `虚灵刀放逐了 ${exiledNames.join('、')}！` });
+        depsRef.current.addGameLog('equip', `${sourceLabel}放逐：${exiledNames.join('、')} 被移除出游戏。`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${sourceLabel}放逐了 ${exiledNames.join('、')}！` });
       }
       dispatch({ type: 'SET_GHOST_BLADE_EXILE_CARDS', payload: null });
       depsRef.current.ghostBladeExileResolverRef.current?.();
       depsRef.current.ghostBladeExileResolverRef.current = null;
+      depsRef.current.ghostBladeExileSourceLabelRef.current = '';
     },
     [ghostBladeExileCards, dispatch],
   );

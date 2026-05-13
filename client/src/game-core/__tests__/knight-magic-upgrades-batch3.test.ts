@@ -639,9 +639,9 @@ describe('盾影双噬 (armor-double-strike) — handler description updates', (
       value: 0,
       classCard: true,
       magicType: 'permanent' as any,
-      description: '永久：选择一面护盾，对随机 2 个怪物各造成 50% 护甲值的法术伤害，然后该护盾耐久 -1。',
-      shortDescription: '50% 护甲法伤随机 2 怪；该盾耐久 -1',
-      magicEffect: '护甲值 50% 伤害随机两怪，盾耐久 -1。',
+      description: '永久：选择一件护甲装备，对当前行所有怪物各造成 50% 护甲值的法术伤害，然后该装备耐久 -1。',
+      shortDescription: '50% 护甲法伤全场；该装备耐久 -1',
+      magicEffect: '护甲值 50% 伤害全场，装备耐久 -1。',
       knightEffect: 'armor-double-strike',
       recycleDelay: 1,
       maxUpgradeLevel: 2,
@@ -649,33 +649,33 @@ describe('盾影双噬 (armor-double-strike) — handler description updates', (
     } as any;
   }
 
-  it('L0 → L1: 50% → 75%（目标数仍 2）', () => {
+  it('L0 → L1: 50% → 75%（目标始终全场）', () => {
     const card = adsL0();
     const state = makeState({ handCards: [card] });
     const result = reduce(state, { type: 'UPGRADE_CARD', cardId: card.id });
     const upgraded = result.state.handCards[0] as any;
     expect(upgraded.upgradeLevel).toBe(1);
-    expect(upgraded.description).toContain('随机 2 个怪物');
+    expect(upgraded.description).toContain('当前行所有怪物');
     expect(upgraded.description).toContain('75%');
     expect(upgraded.description).not.toContain('50%');
     expect(upgraded.shortDescription).toContain('75%');
-    expect(upgraded.shortDescription).toContain('随机 2 怪');
+    expect(upgraded.shortDescription).toContain('全场');
     expect(upgraded.magicEffect).toContain('75%');
-    expect(upgraded.magicEffect).toContain('随机 2 怪');
+    expect(upgraded.magicEffect).toContain('全场');
   });
 
-  it('L1 → L2: 仍 75%，目标数 2 → 3', () => {
+  it('L1 → L2: 75% → 100%（目标始终全场）', () => {
     const card = { ...adsL0(), upgradeLevel: 1 };
     const state = makeState({ handCards: [card as any] });
     const result = reduce(state, { type: 'UPGRADE_CARD', cardId: card.id });
     const upgraded = result.state.handCards[0] as any;
     expect(upgraded.upgradeLevel).toBe(2);
-    expect(upgraded.description).toContain('随机 3 个怪物');
-    expect(upgraded.description).toContain('75%');
-    expect(upgraded.shortDescription).toContain('随机 3 怪');
-    expect(upgraded.shortDescription).toContain('75%');
-    expect(upgraded.magicEffect).toContain('随机 3 怪');
-    expect(upgraded.magicEffect).toContain('75%');
+    expect(upgraded.description).toContain('当前行所有怪物');
+    expect(upgraded.description).toContain('100%');
+    expect(upgraded.shortDescription).toContain('全场');
+    expect(upgraded.shortDescription).toContain('100%');
+    expect(upgraded.magicEffect).toContain('全场');
+    expect(upgraded.magicEffect).toContain('100%');
   });
 
   it('cannot upgrade past maxUpgradeLevel (2)', () => {
@@ -702,7 +702,7 @@ describe('盾影双噬 (armor-double-strike) — slot-select prompt scales with 
     } as any;
   }
 
-  it('L0 prompt: 50% / 2 个怪物', () => {
+  it('L0 prompt: 50% / 全场', () => {
     const card = makeAdsCard(0);
     const state = makeState({
       handCards: [card],
@@ -713,11 +713,11 @@ describe('盾影双噬 (armor-double-strike) — slot-select prompt scales with 
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
     const pending = result.state.pendingMagicAction as any;
     expect(pending).not.toBeNull();
-    expect(pending.prompt).toContain('随机 2 个怪物');
+    expect(pending.prompt).toContain('当前行所有怪物');
     expect(pending.prompt).toContain('50%');
   });
 
-  it('L1 prompt: 75% / 2 个怪物', () => {
+  it('L1 prompt: 75% / 全场', () => {
     const card = makeAdsCard(1);
     const state = makeState({
       handCards: [card],
@@ -727,11 +727,11 @@ describe('盾影双噬 (armor-double-strike) — slot-select prompt scales with 
     });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
     const pending = result.state.pendingMagicAction as any;
-    expect(pending.prompt).toContain('随机 2 个怪物');
+    expect(pending.prompt).toContain('当前行所有怪物');
     expect(pending.prompt).toContain('75%');
   });
 
-  it('L2 prompt: 75% / 3 个怪物', () => {
+  it('L2 prompt: 100% / 全场', () => {
     const card = makeAdsCard(2);
     const state = makeState({
       handCards: [card],
@@ -741,8 +741,8 @@ describe('盾影双噬 (armor-double-strike) — slot-select prompt scales with 
     });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
     const pending = result.state.pendingMagicAction as any;
-    expect(pending.prompt).toContain('随机 3 个怪物');
-    expect(pending.prompt).toContain('75%');
+    expect(pending.prompt).toContain('当前行所有怪物');
+    expect(pending.prompt).toContain('100%');
   });
 });
 
@@ -761,7 +761,7 @@ describe('盾影双噬 (armor-double-strike) — executeArmorDoubleStrike damage
     } as any;
   }
 
-  it('L0: armor 8 × 50% = 4 dmg, hits 2 of 3 monsters', () => {
+  it('L0: armor 8 × 50% = 4 dmg, hits ALL 3 monsters', () => {
     const card = makeAdsCard(0);
     const state = makeState({
       handCards: [card],
@@ -785,11 +785,11 @@ describe('盾影双噬 (armor-double-strike) — executeArmorDoubleStrike damage
     const monsters = result.state.activeCards.filter(c => c?.type === 'monster') as Array<{ id: string; hp: number }>;
     const hits = monsters.filter(m => m.hp === 96);
     const misses = monsters.filter(m => m.hp === 100);
-    expect(hits.length).toBe(2);
-    expect(misses.length).toBe(1);
+    expect(hits.length).toBe(3);
+    expect(misses.length).toBe(0);
   });
 
-  it('L1: armor 8 × 75% = 6 dmg, hits 2 of 3 monsters', () => {
+  it('L1: armor 8 × 75% = 6 dmg, hits ALL 3 monsters', () => {
     const card = makeAdsCard(1);
     const state = makeState({
       handCards: [card],
@@ -813,11 +813,11 @@ describe('盾影双噬 (armor-double-strike) — executeArmorDoubleStrike damage
     const monsters = result.state.activeCards.filter(c => c?.type === 'monster') as Array<{ id: string; hp: number }>;
     const hits = monsters.filter(m => m.hp === 94);
     const misses = monsters.filter(m => m.hp === 100);
-    expect(hits.length).toBe(2);
-    expect(misses.length).toBe(1);
+    expect(hits.length).toBe(3);
+    expect(misses.length).toBe(0);
   });
 
-  it('L2: armor 8 × 75% = 6 dmg, hits 3 of 4 monsters', () => {
+  it('L2: armor 8 × 100% = 8 dmg, hits ALL 4 monsters', () => {
     const card = makeAdsCard(2);
     const state = makeState({
       handCards: [card],
@@ -840,13 +840,13 @@ describe('盾影双噬 (armor-double-strike) — executeArmorDoubleStrike damage
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'armor-double-strike', slotId: 'equipmentSlot1' } as GameAction,
     ]);
     const monsters = result.state.activeCards.filter(c => c?.type === 'monster') as Array<{ id: string; hp: number }>;
-    const hits = monsters.filter(m => m.hp === 94);
+    const hits = monsters.filter(m => m.hp === 92);
     const misses = monsters.filter(m => m.hp === 100);
-    expect(hits.length).toBe(3);
-    expect(misses.length).toBe(1);
+    expect(hits.length).toBe(4);
+    expect(misses.length).toBe(0);
   });
 
-  it('L2: armor 8 × 75% = 6 dmg, hits all 2 monsters when only 2 exist (no doubling)', () => {
+  it('L2: armor 8 × 100% = 8 dmg, hits both monsters when only 2 exist', () => {
     const card = makeAdsCard(2);
     const state = makeState({
       handCards: [card],
@@ -865,8 +865,8 @@ describe('盾影双噬 (armor-double-strike) — executeArmorDoubleStrike damage
     ]);
     const m1 = result.state.activeCards.find(c => c?.id === 'm1') as { hp: number } | undefined;
     const m2 = result.state.activeCards.find(c => c?.id === 'm2') as { hp: number } | undefined;
-    expect(m1?.hp).toBe(94);
-    expect(m2?.hp).toBe(94);
+    expect(m1?.hp).toBe(92);
+    expect(m2?.hp).toBe(92);
   });
 });
 

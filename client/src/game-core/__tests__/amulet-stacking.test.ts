@@ -64,6 +64,25 @@ describe('computeAmuletEffects stacking', () => {
       expect(fx.lifeOverkillBonus).toBe(9);
     });
 
+    it('闪光 ×2 — flashCount = 2, lifeOverkillBonus = -4 (each amulet: +1 extra attack/slot AND -2 overkill lifesteal)', () => {
+      const fx = computeAmuletEffects([
+        makeAmulet('flash', 'f-1'),
+        makeAmulet('flash', 'f-2'),
+      ] as any);
+      expect(fx.flashCount).toBe(2);
+      expect(fx.lifeOverkillBonus).toBe(-4);
+    });
+
+    it('生命 ×2 + 闪光 ×1 — lifeOverkillBonus = +6 - 2 = +4 (life and flash share the same field, naturally cancelling)', () => {
+      const fx = computeAmuletEffects([
+        makeAmulet('life', 'l-1'),
+        makeAmulet('life', 'l-2'),
+        makeAmulet('flash', 'f-1'),
+      ] as any);
+      expect(fx.lifeOverkillBonus).toBe(4);
+      expect(fx.flashCount).toBe(1);
+    });
+
     it('击晕金币 ×3 — stunGoldCount = 3 (consumer multiplies +10 per amulet)', () => {
       const fx = computeAmuletEffects([
         makeAmulet('stun-gold', 'sg-1'),
@@ -81,6 +100,18 @@ describe('computeAmuletEffects stacking', () => {
       ] as any);
       expect(fx.stunRateBoost).toBe(60);
     });
+
+    // 灵魂吞噬 (`soul-devour`) 在牌库里是 unique，所以 N 实际只会是 0 或 1。
+    // 但仍然按 `amulet-stacking-design.mdc` 的 linear ×N 规范注册——这样未来
+    // 通过 `amulet-to-eternal-relic` 等机制挂第二份 effectId 时不会突然变成
+    // bug；此处验证 stacking 在 effect-id 层面行为正确。
+    it('灵魂吞噬 ×2 — soulDevourCount = 2 (linear stacking 规范，unique 锁保证牌库只放 1 张)', () => {
+      const fx = computeAmuletEffects([
+        makeAmulet('soul-devour', 'sd-1'),
+        makeAmulet('soul-devour', 'sd-2'),
+      ] as any);
+      expect(fx.soulDevourCount).toBe(2);
+    });
   });
 
   describe('compound stack (counts feed into 2^N at consumer)', () => {
@@ -91,14 +122,6 @@ describe('computeAmuletEffects stacking', () => {
         makeAmulet('heal', 'h-3'),
       ] as any);
       expect(fx.healCount).toBe(3);
-    });
-
-    it('闪光 ×2 — flashCount = 2 (consumer divides damage by 2^2 = 4 and grants 2 extra attacks)', () => {
-      const fx = computeAmuletEffects([
-        makeAmulet('flash', 'f-1'),
-        makeAmulet('flash', 'f-2'),
-      ] as any);
-      expect(fx.flashCount).toBe(2);
     });
   });
 

@@ -2,18 +2,17 @@
  * 盾影双噬 (knight:armor-double-strike) — Perm 1 magic.
  *
  * On play:
- *   - 0 shields equipped → cancel, no damage, no durability change.
- *   - 1 shield equipped  → auto-pick that shield, deal damage, -1 durability.
- *   - 2 shields equipped → open slot-select pendingMagicAction.
+ *   - 0 shields/monster-equips equipped → cancel, no damage, no durability change.
+ *   - 1 shield/monster-equip equipped   → auto-pick that slot, deal damage, -1 durability.
+ *   - 2 shields/monster-equips equipped → open slot-select pendingMagicAction.
  *
  * On RESOLVE_MAGIC_SLOT_SELECTION (after slot-select):
- *   - Shield's full armor value × armorPct% = perTargetDamage (spell damage).
- *   - Up to 2 random monsters from the active row get one hit each
- *     (when only 1 monster exists, it is hit once — no doubling).
- *   - Selected shield loses 1 durability; if it would hit 0, the standard
+ *   - Slot's full armor value × armorPct% = perTargetDamage (spell damage).
+ *   - EVERY monster in the active row receives one hit (no random subset).
+ *   - Selected slot loses 1 durability; if it would hit 0, the standard
  *     equipment break flow runs (last-words / revive / salvage).
  *
- * Upgrade level: 0 → 50%, 1 → 75%.
+ * Upgrade level: 0 → 50%, 1 → 75%, 2 → 100%.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -129,7 +128,7 @@ describe('盾影双噬 (armor-double-strike) initial dispatch', () => {
 });
 
 describe('盾影双噬 RESOLVE_MAGIC_SLOT_SELECTION', () => {
-  it('hits 2 random monsters for floor(armor * 50%) each', () => {
+  it('hits ALL monsters for floor(armor * 50%) each (no random subset)', () => {
     const card = makeCard('two-hit');
     const shield = makeShield({ id: 's1', value: 6, armorMax: 6, durability: 3 });
     const m1 = makeMonster('m1', 50);
@@ -150,18 +149,18 @@ describe('盾影双噬 RESOLVE_MAGIC_SLOT_SELECTION', () => {
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'armor-double-strike', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    // Exactly two of the three monsters should have lost floor(6 * 0.5) = 3 hp.
+    // ALL three monsters should have lost floor(6 * 0.5) = 3 hp.
     const survivors = result.state.activeCards.filter(c => c?.type === 'monster') as Array<{ id: string; hp: number }>;
     const hits = survivors.filter(s => s.hp === 47);
     const misses = survivors.filter(s => s.hp === 50);
-    expect(hits.length).toBe(2);
-    expect(misses.length).toBe(1);
+    expect(hits.length).toBe(3);
+    expect(misses.length).toBe(0);
     // Shield durability 3 → 2.
     expect(result.state.equipmentSlot1?.durability).toBe(2);
     expect(result.state.pendingMagicAction).toBeNull();
   });
 
-  it('with only 1 monster: hits it once (no doubling), still consumes durability', () => {
+  it('with only 1 monster: hits it once, still consumes durability', () => {
     const card = makeCard('one-mon');
     const shield = makeShield({ value: 8, armorMax: 8, durability: 2 });
     const monster = makeMonster('m1', 100);
@@ -180,7 +179,7 @@ describe('盾影双噬 RESOLVE_MAGIC_SLOT_SELECTION', () => {
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'armor-double-strike', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    // floor(8 * 0.5) = 4 damage, applied ONCE (not 2x).
+    // floor(8 * 0.5) = 4 damage, applied once.
     const m = result.state.activeCards.find(c => c?.id === 'm1');
     expect(m?.hp).toBe(96);
     // Durability 2 → 1.

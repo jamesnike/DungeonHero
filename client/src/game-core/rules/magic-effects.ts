@@ -2674,15 +2674,17 @@ export function resolveKnightInstantMagic(
 /**
  * 盾影双噬 (`armor-double-strike`) shared executor.
  *
- * Picks up to 2 random monsters from the active row and deals each a spell hit
- * worth `armorPct%` of the chosen shield's armor value, then consumes 1
- * durability from that shield (going through the standard equipment break flow
- * — last-words / revive / salvage — when the shield was at its last point).
+ * Deals each monster in the active row a spell hit worth `armorPct%` of the
+ * chosen shield (or monster equipment)'s armor value, then consumes 1
+ * durability from that equipment (going through the standard equipment break
+ * flow — last-words / revive / salvage — when the equipment was at its last
+ * point).
  *
  * Called from two places:
  *   1. The initial `resolveKnightPermanentMagic` dispatch when only a single
- *      shield slot is equipped (auto-pick, mirroring `armor-strike`).
- *   2. `reduceMagicSlotSelection` after the player picks a shield via the
+ *      shield/monster equipment slot is equipped (auto-pick, mirroring
+ *      `armor-strike`).
+ *   2. `reduceMagicSlotSelection` after the player picks a slot via the
  *      slot-select prompt.
  */
 export function executeArmorDoubleStrike(
@@ -2696,31 +2698,26 @@ export function executeArmorDoubleStrike(
 ): ReduceResult {
   const slotItem = (slotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2) as GameCardData | null;
   if (!slotItem || (slotItem.type !== 'shield' && slotItem.type !== 'monster')) {
-    banner(sideEffects, '请选择一面护盾。');
+    banner(sideEffects, '请选择一件护甲装备。');
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
   // Damage = armorPct% of the slot's full armor value (base + permanent + temp).
-  const armorPcts = [50, 75];
-  const armorPct = armorPcts[card.upgradeLevel ?? 0] ?? 75;
+  const armorPcts = [50, 75, 100];
+  const armorPct = armorPcts[card.upgradeLevel ?? 0] ?? armorPcts[armorPcts.length - 1];
   const rawArmor = computeSlotArmorValuePure(state, slotId);
   const scaledArmor = Math.floor(rawArmor * armorPct / 100);
   const ampBonus = card.amplifyBonus ?? 0;
   const perTargetDamage = getSpellDamage(scaledArmor + ampBonus, state) * echoMultiplier;
   const echoTagADS = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
 
-  // Pick up to 2 random monsters; if only 1 exists, hit it once (no doubling).
+  // Hit every monster in the active row (no random subset, no shuffling).
   const monsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
   let dealtDamage = false;
   if (monsters.length > 0 && perTargetDamage > 0) {
-    let rng = state.rng;
-    const [shuffled, rng2] = rngShuffle(monsters, rng);
-    rng = rng2;
-    const targets = shuffled.slice(0, 2);
-    patch.rng = rng;
-    for (const target of targets) {
+    for (const target of monsters) {
       ensureMonsterEngaged(state, target, enqueuedActions);
       enqueuedActions.push({
         type: 'DEAL_DAMAGE_TO_MONSTER',
@@ -2732,7 +2729,7 @@ export function executeArmorDoubleStrike(
     }
     dealtDamage = true;
     log(sideEffects, 'magic',
-      `盾影双噬：${slotItem.name} 护甲 ${rawArmor} → 伤害 ${perTargetDamage}（${armorPct}%），命中 ${targets.length} 个怪物。${echoTagADS}`);
+      `盾影双噬：${slotItem.name} 护甲 ${rawArmor} → 每目标 ${perTargetDamage}（${armorPct}%），命中 ${monsters.length} 个怪物。${echoTagADS}`);
   } else if (monsters.length === 0) {
     log(sideEffects, 'magic', `盾影双噬：激活行没有怪物，未造成伤害。`);
   } else {
@@ -2765,8 +2762,8 @@ export function executeArmorDoubleStrike(
 
   patch.pendingMagicAction = null;
   patch.heroSkillBanner = monsters.length > 0 && perTargetDamage > 0
-    ? `盾影双噬：每目标 ${perTargetDamage} 伤害，护盾耐久 -1。${echoTagADS}`
-    : `盾影双噬：护盾耐久 -1。${echoTagADS}`;
+    ? `盾影双噬：全场每怪 ${perTargetDamage} 伤害，装备耐久 -1。${echoTagADS}`
+    : `盾影双噬：装备耐久 -1。${echoTagADS}`;
   patch.lastPlayedCardCategory = getCardPlayCategory(card);
   enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage });
   return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -2906,23 +2903,26 @@ export function resolveKnightPermanentMagic(
         s.item.type === 'shield' || s.item.type === 'monster',
       );
       if (shieldSlots.length === 0) {
-        banner(sideEffects, '没有可用的护盾。');
+        banner(sideEffects, '没有可用的护甲装备。');
         patch.lastPlayedCardCategory = getCardPlayCategory(card);
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
         return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
-      // Auto-pick when only one shield is equipped (mirrors armor-strike).
+      // Auto-pick when only one shield/monster equipment is equipped
+      // (mirrors armor-strike).
       if (shieldSlots.length === 1) {
         return executeArmorDoubleStrike(state, card, shieldSlots[0].id, sideEffects, patch, enqueuedActions, echoMultiplier);
       }
+      const armorPcts = [50, 75, 100];
+      const armorPct = armorPcts[card.upgradeLevel ?? 0] ?? armorPcts[armorPcts.length - 1];
       patch.pendingMagicAction = {
         card,
         effect: 'armor-double-strike',
         step: 'slot-select',
-        prompt: '选择一面护盾，对随机 2 个怪物各造成 50% 护甲值伤害（耐久 -1）。',
+        prompt: `选择一件护甲装备，对当前行所有怪物各造成 ${armorPct}% 护甲值伤害（耐久 -1）。`,
         echoMultiplier,
       } as PendingMagicAction;
-      patch.heroSkillBanner = '盾影双噬：选择一面护盾。';
+      patch.heroSkillBanner = '盾影双噬：选择一件护甲装备。';
       return applyPatch(state, patch, sideEffects);
     }
 
@@ -3434,12 +3434,20 @@ export function resolveKnightPermanentMagic(
       // into temp attack on both equipment slots, then clear the temporary
       // part (mirroring what a persuade attempt does).
       //
-      //   X            = persuadeAmuletBonus           (temp, cleared)
-      //                + persuadeDiscount.rateBonus    (temp, cleared — same
-      //                                                  semantics as
-      //                                                  PERSUADE_MONSTER's
-      //                                                  `persuadeDiscount = null`)
-      //                + permanentPersuadeBonus        (perm, NOT cleared)
+      // X must mirror exactly what the hero card sticker shows as
+      // 「下次劝降 +X%」 (see GameBoard.tsx:8263 / HeroCard.tsx:54):
+      //
+      //   X            = persuadeAmuletBonus            (temp, cleared)
+      //                + persuadeDiscount.rateBonus     (temp, cleared — same
+      //                                                   semantics as
+      //                                                   PERSUADE_MONSTER's
+      //                                                   `persuadeDiscount = null`)
+      //                + permanentPersuadeBonus         (perm, NOT cleared)
+      //                + (persuadeLevel - 1) * 5        (perm, NOT cleared —
+      //                                                   came from
+      //                                                   persuadeLevel+1 events
+      //                                                   like 威压交涉 / 永誓
+      //                                                   低吟 / 怀柔圣殿)
       //   per-slot     = Math.ceil(X / 3)
       //   slot1, slot2 each += per-slot temp attack
       //   Cleared "临时部分":
@@ -3450,9 +3458,9 @@ export function resolveKnightPermanentMagic(
       //
       // Echo (Category C, structural): runs `echoMultiplier` times. After
       // pass 1 the temp parts are 0, so pass 2's X = permanentPersuadeBonus
-      // alone — if perm > 0, pass 2 still adds another ceil(perm/3) per slot
-      // (per user spec). If X stays 0 across all passes, fizzle (still
-      // consumed; no temp attack added).
+      // + (persuadeLevel - 1) * 5 — if any perm contributor > 0, pass 2 still
+      // adds another ceil(perm/3) per slot (per user spec). If X stays 0
+      // across all passes, fizzle (still consumed; no temp attack added).
       let totalAddedPerSlot = 0;
       let didFire = false;
 
@@ -3463,7 +3471,9 @@ export function resolveKnightPermanentMagic(
           ? patch.persuadeDiscount
           : state.persuadeDiscount) ?? null;
         const discountRateBonus = currentDiscount?.rateBonus ?? 0;
-        const X = tempBonus + permBonus + discountRateBonus;
+        const persuadeLevel = (patch.persuadeLevel ?? state.persuadeLevel ?? 1);
+        const levelBonus = Math.max(0, persuadeLevel - 1) * 5;
+        const X = tempBonus + permBonus + discountRateBonus + levelBonus;
         if (X <= 0) continue;
 
         const perSlot = Math.ceil(X / 3);
@@ -4079,12 +4089,17 @@ export function resolveKnightPermanentMagic(
               accumulateMineDamageBoost(state, item, finalDurLost, patch, sideEffects);
             }
 
-            // 残骸回收符 (equipment-salvage amulet): for weapons/shields,
-            // return the broken card to hand with maxDurability-N instead
-            // of being lost (N = number of equipped salvage amulets).
+            // 残骸回收符 (equipment-salvage amulet): for weapons / shields /
+            // 怪物装备, return the broken card to hand with maxDurability-N
+            // instead of being lost (N = number of equipped salvage amulets).
             // Each piece in the discard-rebuild stack is judged independently
             // (matches user-confirmed design — main + every reserve piece
             // gets its own salvage check).
+            //
+            // 怪物装备的 salvage：累加 `salvageReduction` 持久化 cap 减少（即使
+            // 经过坟场再被拉回也保留），同时清掉战斗中累积的临时状态、把血层
+            // fury / hpLayers / currentLayer 同步到新 cap。详见
+            // `equipment-effects.ts:computeEquipmentBreakEffects` 镜像分支。
             //
             // Perm-priority rule: equipment carrying a Perm flag (永恒铭刻 etc.)
             // routes to the recycle bag, salvage SKIPPED so the card is not
@@ -4094,7 +4109,7 @@ export function resolveKnightPermanentMagic(
             const salvageCount = amuletEffects.equipmentSalvageCount;
             const canSalvage = !isPermRecycle
               && salvageCount > 0
-              && (item.type === 'weapon' || item.type === 'shield');
+              && (item.type === 'weapon' || item.type === 'shield' || item.type === 'monster');
 
             if (canSalvage) {
               const newMaxDur = (item.maxDurability ?? 1) - salvageCount;
@@ -4113,7 +4128,27 @@ export function resolveKnightPermanentMagic(
                   wraithRebirthUsed: _wru,
                   ...rest
                 } = item as GameCardData & Record<string, unknown>;
-                const salvaged: GameCardData = { ...(rest as GameCardData), durability: 1, maxDurability: newMaxDur };
+                const cleanedBase = rest as GameCardData;
+                let salvaged: GameCardData;
+                if (item.type === 'monster') {
+                  const prevReduction = cleanedBase.salvageReduction ?? 0;
+                  salvaged = {
+                    ...cleanedBase,
+                    tempAttackBoost: 0,
+                    tempHpBoost: 0,
+                    specialAttackBoost: 0,
+                    lowGoldBuffActive: false,
+                    skipNextMonsterTurn: undefined,
+                    durability: 1,
+                    maxDurability: newMaxDur,
+                    currentLayer: 1,
+                    fury: newMaxDur,
+                    hpLayers: newMaxDur,
+                    salvageReduction: prevReduction + salvageCount,
+                  };
+                } else {
+                  salvaged = { ...cleanedBase, durability: 1, maxDurability: newMaxDur };
+                }
                 patch.handCards = [...(patch.handCards ?? state.handCards), salvaged];
                 sideEffects.push({ event: 'card:equipmentSalvaged', payload: { card: salvaged, slotHint: sid } });
                 sideEffects.push({

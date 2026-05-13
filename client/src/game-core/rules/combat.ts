@@ -554,6 +554,15 @@ function reduceApplyDamage(
     if (action.selfInflicted) {
       sideEffects.push({ event: 'combat:addMagicGauge', payload: { gaugeType: 'revive-blessing', amount: 1 } });
     }
+    // 灵魂吞噬 (soul-devour) 护符：HP 实际减少时触发坟场放逐弹窗。
+    // 复用 ghost blade exile 弹窗机制（虚灵刀同款），通过 sourceLabel 区分文案。
+    // 完美格挡 / tempShield 全收 / 不灭守护抵消 等 appliedDamage===0 场景天然不触发。
+    if (amuletEffects.soulDevourCount > 0) {
+      sideEffects.push({
+        event: 'combat:ghostBladeExile',
+        payload: { source: 'amulet', sourceLabel: '灵魂吞噬' },
+      });
+    }
   }
 
   // 不灭守护自动触发：消耗手牌里的卡片 → 进坟场 → 阻挡致死伤害 → 弹通知 modal。
@@ -2574,10 +2583,7 @@ function reducePerformHeroAttack(
 
   const stunnedDoubleMultiplier = (slotItem as GameCardData).doubleDamageOnStunned
     && (targetMonster.isStunned || preRolledStunSuccess) ? 2 : 1;
-  const preFinalDamage = (isCrit ? baseDamage * 2 : baseDamage) * stunnedDoubleMultiplier;
-  const finalDamage = ae.flashCount > 0
-    ? Math.max(0, Math.floor(preFinalDamage / Math.pow(2, ae.flashCount)))
-    : preFinalDamage;
+  const finalDamage = (isCrit ? baseDamage * 2 : baseDamage) * stunnedDoubleMultiplier;
 
   // --- Clear consumed bonuses ---
   if (appliedNextBonus > 0) patch.nextWeaponBonus = 0;
@@ -2601,7 +2607,7 @@ function reducePerformHeroAttack(
     event: 'log:entry',
     payload: {
       type: 'combat',
-      message: `使用 ${slotItem.name}(${slotItem.value}攻) 攻击 ${targetMonster.name}，伤害 ${finalDamage}${ae.flashCount > 0 ? `（闪光减伤 ÷${Math.pow(2, ae.flashCount)}）` : ''}`,
+      message: `使用 ${slotItem.name}(${slotItem.value}攻) 攻击 ${targetMonster.name}，伤害 ${finalDamage}`,
     },
   });
   sideEffects.push({ event: 'combat:weaponSwing', payload: { slotId, delay: 0, echoes: 2 } });
@@ -3556,7 +3562,10 @@ function reducePerformHeroAttack(
 
   // --- Ghost blade exile ---
   if ((slotItem as GameCardData).ghostBladeExile) {
-    sideEffects.push({ event: 'combat:ghostBladeExile', payload: {} });
+    sideEffects.push({
+      event: 'combat:ghostBladeExile',
+      payload: { source: 'weapon', sourceLabel: '虚灵刀' },
+    });
   }
 
   // --- Post-attack hand recycle ---

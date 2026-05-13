@@ -105,7 +105,7 @@ export interface CombatActionsDeps {
     predeterminedRoll?: number;
   }) => Promise<EventDiceRange | null>;
   addHeroMagicGauge: (id: HeroMagicId, amount: number) => void;
-  triggerGhostBladeExile: () => Promise<void>;
+  triggerGhostBladeExile: (sourceLabel: string) => Promise<void>;
   requestCardAction: (
     keyword: CardActionKeyword,
     count: number,
@@ -710,8 +710,8 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     startNextDiscover();
   });
 
-  useGameEvent('combat:ghostBladeExile', () => {
-    depsRef.current.triggerGhostBladeExile();
+  useGameEvent('combat:ghostBladeExile', ({ sourceLabel }) => {
+    depsRef.current.triggerGhostBladeExile(sourceLabel);
   });
 
   useGameEvent('combat:arcaneBladeSpell', ({ slotId, targetId }) => {

@@ -13,6 +13,7 @@ import type { GameState } from './types';
 import type { GameAction } from './actions';
 import type { GameEventKey, GameEventMap } from './event-bus';
 import type { ActiveRowSlots } from '@/components/game-board/types';
+import type { GameCardData } from '@/components/GameCard';
 import { DEV_MODE, DUNGEON_COLUMN_COUNT } from './constants';
 import { reduceTurnActions } from './rules/turn';
 import { reduceCombatActions } from './rules/combat';
@@ -257,10 +258,14 @@ function postProcessActiveCards(
   // 3.5. Kill-cell mine spawn (殒雷符 amulet, unique).
   //      When a defeated monster (`prev?.defeatProcessed === true`) leaves a
   //      slot — whether the slot becomes null OR another card now occupies it
-  //      (stack-pop, swarm-buglet from step 3, future card promote) — spawn a
-  //      mine. If the slot is already occupied (curr !== null), the mine is
-  //      placed ON TOP and the existing card is pushed to `activeCardStacks`
-  //      (per user spec "堆叠在上面").
+  //      (stack-pop, swarm-buglet from step 3, future card promote) — spawn
+  //      `MINES_PER_KILL` mines. The newest mine sits on top of `activeCards`;
+  //      earlier mines + any pre-existing occupant are pushed into
+  //      `activeCardStacks[col]` in order (bottom = original stack, then the
+  //      pre-existing occupant if any, then earlier mines, with the visible
+  //      mine on top). When a monster later falls onto this cell,
+  //      `waterfall.ts` "同 cell 堆叠地雷连环引爆" automatically fires every
+  //      stacked mine in sequence and routes each one to the graveyard.
   //
   //      Detection key: `prev?.defeatProcessed === true && curr !== prev`.
   //      `defeatProcessed: true` is set ONLY in `combat.ts:reduceMonsterDefeated`
@@ -271,7 +276,7 @@ function postProcessActiveCards(
   //      mine itself / reflect / discard damage / last-words damage all count).
   //      Self-mine kills DO retrigger (chains of mines on the same cell are
   //      allowed by design — unique amulet caps at 1 instance, so each kill
-  //      adds exactly 1 mine).
+  //      adds exactly `MINES_PER_KILL` mines).
   //
   //      Routing the mine spawn through `extraActions` (a new SPAWN_KILL_CELL_MINE
   //      enqueue) would be cleaner architecturally but creates an
@@ -281,6 +286,11 @@ function postProcessActiveCards(
   {
     const ae = computeAmuletEffectsForState(state);
     if (ae.killCellMineCount > 0) {
+      // Per user spec: 每击杀一个怪物，立刻在该位置生成 2 个地雷。
+      // Designed as a constant (not amulet-count-scaled) — `unique: true`
+      // already caps `killCellMineCount` at 1, and design intent is "one
+      // amulet → fixed 2 mines per kill", not "linear stacking".
+      const MINES_PER_KILL = 2;
       const nextActiveCards: ActiveRowSlots = [...state.activeCards] as ActiveRowSlots;
       const nextStacks: typeof state.activeCardStacks = { ...state.activeCardStacks };
       let mineRng = state.rng;
@@ -293,20 +303,21 @@ function postProcessActiveCards(
         if (!prev || prev.type !== 'monster' || !prev.defeatProcessed) continue;
         if (curr === prev) continue; // monster still in slot, animation phase
 
-        const [mine, nextRng] = createMineBuilding(mineRng);
-        mineRng = nextRng;
-
-        if (curr) {
-          // Stack-pop / swarm-buglet / waterfall-drop already filled the slot.
-          // Mine goes on top; push current card to the bottom of the stack
-          // (visible card is replaced; old occupant pops up next).
-          const existingStack = nextStacks[col] ?? [];
-          nextStacks[col] = [...existingStack, curr];
-          nextActiveCards[col] = mine;
-        } else {
-          // Slot is empty — drop mine straight in.
-          nextActiveCards[col] = mine;
+        // Stack each mine on top in sequence: the latest mine becomes the
+        // visible top; earlier mines (and any pre-existing occupant) sink
+        // into `activeCardStacks[col]` (next-to-pop = end of array).
+        let topCard: GameCardData | null = curr ?? null;
+        let stackBase = nextStacks[col] ?? [];
+        for (let i = 0; i < MINES_PER_KILL; i++) {
+          const [mine, nextRng] = createMineBuilding(mineRng);
+          mineRng = nextRng;
+          if (topCard) {
+            stackBase = [...stackBase, topCard];
+          }
+          topCard = mine;
         }
+        nextActiveCards[col] = topCard;
+        nextStacks[col] = stackBase;
         mineMutated = true;
 
         result = {
@@ -317,12 +328,12 @@ function postProcessActiveCards(
               event: 'log:entry',
               payload: {
                 type: 'amulet',
-                message: `殒雷符：第 ${col + 1} 列击杀触发，生成地雷${curr ? '（堆叠在 '+ curr.name +' 上）' : ''}！`,
+                message: `殒雷符：第 ${col + 1} 列击杀触发，生成 ${MINES_PER_KILL} 个地雷${curr ? '（堆叠在 '+ curr.name +' 上）' : ''}！`,
               },
             },
             {
               event: 'ui:banner',
-              payload: { text: `殒雷符发动：第 ${col + 1} 列布下地雷！` },
+              payload: { text: `殒雷符发动：第 ${col + 1} 列布下 ${MINES_PER_KILL} 个地雷！` },
             },
           ],
         };

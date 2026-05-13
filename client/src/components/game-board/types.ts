@@ -1047,9 +1047,19 @@ export type ActiveAmuletEffects = {
   aura: AmuletAuraTotals;
   healCount: number;
   balanceCount: number;
-  /** Sum of `4 × count` (4 per equipped 生命之符). */
+  /**
+   * Aggregate overkill lifesteal aura: `+3 × life-amulet-count − 2 × flash-amulet-count`.
+   * May be negative — consumer adds it to `permanentSpellLifesteal` and gates the
+   * heal trigger on `effectiveLifesteal > 0`, so a negative aggregate simply
+   * yields no heal (it never inverts into self-damage).
+   */
   lifeOverkillBonus: number;
   catapultCount: number;
+  /**
+   * Number of equipped 闪光符 amulets. Each grants +1 extra attack per slot per
+   * turn AND subtracts 2 from `lifeOverkillBonus` (mirror of life amulet's +3,
+   * sharing the same field — see equipment.ts `case 'flash'`).
+   */
   flashCount: number;
   strengthCount: number;
   dualGuardCount: number;
@@ -1098,12 +1108,15 @@ export type ActiveAmuletEffects = {
    *  N 次，每次仍各自按 `1 + lastWordsExtraTriggerCount` 放大；多重 amulet 与 echo
    *  共同放大是设计内行为，与「绝响之符」等 per-trigger 联动一致。 */
   lastWordsExtraTriggerCount: number;
-  /** 「殒雷符」（unique）每击杀一只怪物，立即在该 cell 生成一个「地雷」幽灵建筑。
-   *  Cell 在 mine 落下时已有卡（stack-pop / swarm-buglet / 瀑流后续）→ mine 堆叠在其上。
+  /** 「殒雷符」（unique）每击杀一只怪物，立即在该 cell 生成 2 个「地雷」幽灵建筑。
+   *  顶层为最新地雷，第一枚地雷 + cell 原 occupant（stack-pop / swarm-buglet / 瀑流后续）
+   *  推入 `activeCardStacks[col]`（顺序：原 stack → 原 occupant → 第一枚地雷 → 顶层最新地雷）。
    *  目标卡是怪物即可触发（任何来源：武器 / magic / 地雷 / 反震 / 弃牌伤害 / 遗言伤害）。
    *  unique=true → 同时最多 1 张，count 实际只会是 0/1。
-   *  生成的地雷复用 `createMineBuilding`，受「引雷阵锋」globalMineDamageBonus 加成，
-   *  跟「布雷术」生成的地雷在数据上完全等价。 */
+   *  生成的地雷复用 `createMineBuilding`（每个 5 点纯伤），受「引雷阵锋」
+   *  globalMineDamageBonus 加成，跟「布雷术」生成的地雷在数据上完全等价。后续怪物落到
+   *  该 cell 时，`waterfall.ts` 的「同 cell 堆叠地雷连环引爆」逻辑自动让 2 枚地雷依次
+   *  触发并各自结算伤害。 */
   killCellMineCount: number;
   /** 「循手之符」每"手动"拖卡到回收袋（waitsOverride === 1 标记）累计 +N（每件 +1）。
    *  累计达 2 张 → 从背包抽 1 张牌；进度归 0。仅手动路径触发——出牌自回收 / 装备销毁 /
@@ -1117,6 +1130,16 @@ export type ActiveAmuletEffects = {
    *  uniqe=true → 牌库内最多 1 张，但 eternal relic 可挂第二份 effectId，
    *  按 progress counter ×N stacking 处理。 */
   mirrorCopySummonCount: number;
+  /**
+   * 灵魂吞噬 (`soul-devour`)：每次受到伤害（HP 实际减少时），可从坟场放逐 1 张卡。
+   *
+   * Stacking 类别：linear ×N（参考 `amulet-stacking-design.mdc`）。当前牌库设计为
+   *   unique（仅 1 张），所以 N 总是 0 或 1。但护符如果通过 `amulet-to-eternal-relic`
+   *   类机制挂上第二份 effectId，N 可以 > 1 —— 此时每次受伤可放逐 N 张。
+   *   消费方（`reduceApplyDamage`）目前仅按「触发与否」用，未来若 N>1 想累计 emit
+   *   N 个弹窗机会，需扩展 listener 端按 count 串行触发。
+   */
+  soulDevourCount: number;
 };
 
 export type WaterfallPhase = 'idle' | 'revealing' | 'dropping' | 'discarding' | 'dealing';

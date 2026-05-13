@@ -1861,7 +1861,7 @@ function reduceDisposeEquipmentCard(
     !isPermRecycle
     && isDestruction
     && amuletFx.equipmentSalvageCount > 0
-    && (card.type === 'weapon' || card.type === 'shield')
+    && (card.type === 'weapon' || card.type === 'shield' || card.type === 'monster')
   ) {
     const newMaxDur = (card.maxDurability ?? 1) - amuletFx.equipmentSalvageCount;
     if (newMaxDur <= 0) {
@@ -1874,7 +1874,29 @@ function reduceDisposeEquipmentCard(
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
     const { fromSlot: _, armor: _a, armorBonusDamaged: _b, reviveUsed: _c, equipmentReviveUsed: _d, wraithRebirthUsed: _e, ...rest } = card as any;
-    const salvaged: GameCardData = { ...rest, durability: 1, maxDurability: newMaxDur };
+    let salvaged: GameCardData;
+    if (card.type === 'monster') {
+      // 怪物装备的 salvage：累加 salvageReduction 持久化 cap 减少（即使经过坟
+      // 场再被拉回也保留），同时清掉战斗状态、把血层 fury / hpLayers /
+      // currentLayer 同步到新 cap。详见 `equipment-effects.ts` 镜像分支注释。
+      const prevReduction = (rest as GameCardData).salvageReduction ?? 0;
+      salvaged = {
+        ...(rest as GameCardData),
+        tempAttackBoost: 0,
+        tempHpBoost: 0,
+        specialAttackBoost: 0,
+        lowGoldBuffActive: false,
+        skipNextMonsterTurn: undefined,
+        durability: 1,
+        maxDurability: newMaxDur,
+        currentLayer: 1,
+        fury: newMaxDur,
+        hpLayers: newMaxDur,
+        salvageReduction: prevReduction + amuletFx.equipmentSalvageCount,
+      };
+    } else {
+      salvaged = { ...(rest as GameCardData), durability: 1, maxDurability: newMaxDur };
+    }
     const slotHint: string | undefined = (card as any).fromSlot;
     sideEffects.push({ event: 'card:equipmentSalvaged', payload: { card: salvaged, slotHint } });
     sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `残骸回收符：${card.name} 回到手牌（耐久 1/${newMaxDur}）！` } });

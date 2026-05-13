@@ -919,8 +919,8 @@ export function createDeck(
       name: 'Flash Amulet',
       value: 5,
       image: flashAmuletImage,
-      description: '所有装备攻击力减半，攻击次数+1',
-      shortDescription: '装备攻击减半；攻击次数 +1',
+      description: '超杀吸血-2，攻击次数+1',
+      shortDescription: '超杀吸血 -2；攻击次数 +1',
       amuletEffect: 'flash',
     },
     {

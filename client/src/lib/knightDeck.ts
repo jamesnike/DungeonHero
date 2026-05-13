@@ -46,6 +46,7 @@ import thunderGoldAmuletImage from '@assets/generated_images/knight_thunder_gold
 import starterAmuletDamageDiscoverImage from '@assets/generated_images/starter_amulet_damage_discover.png';
 import knightSpellRuneInscriptionAmuletImage from '@assets/generated_images/knight_spell_rune_inscription_amulet.png';
 import knightAmuletStunRecycleImage from '@assets/generated_images/knight_amulet_stun_recycle.png';
+import knightSoulDevourAmuletImage from '@assets/generated_images/knight_soul_devour_amulet.png';
 // TODO(art): replace with dedicated `knight_mirror_copy_summon_amulet.png` once
 // artwork lands (the granted 「镜影摹形」 still reuses `dedupeKnightMagicMirrorCopyImage`).
 import knightMirrorCopySummonAmuletImage from '@assets/generated_images/knight_mirror_copy_summon_amulet.png';
@@ -272,11 +273,13 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     amuletEffect: 'discard-zap',
   });
 
-  // 殒雷符（unique）：每击杀一只怪物，立刻在该 cell 生成一个「地雷」幽灵建筑。
-  // 跟「布雷术」生成的同款（5 点纯伤、ghost、踩到即触发 + 进坟场，受「引雷阵锋」
+  // 殒雷符（unique）：每击杀一只怪物，立刻在该 cell 生成 2 个「地雷」幽灵建筑。
+  // 跟「布雷术」生成的同款（每个 5 点纯伤、ghost、踩到即触发 + 进坟场，受「引雷阵锋」
   // globalMineDamageBonus 加成）。任何来源击杀都触发（武器 / magic / 反震 /
   // 遗言伤害 / 地雷自己），cell 已被占（stack-pop / swarm-buglet / 瀑流后续）
-  // 时地雷堆叠在上面。
+  // 时 2 个地雷堆叠在上面（顶层为最新地雷，stack 包含原 occupant + 第一枚地雷）。
+  // 后续怪物落到该 cell 时，waterfall.ts 的「同 cell 堆叠地雷连环引爆」逻辑
+  // 自动让 2 枚地雷依次触发并依次结算伤害。
   // 触发实现：reducer.ts postProcessActiveCards step 3.5 检测
   // `prev?.defeatProcessed === true && curr !== prev`，与 swarm spawn 同 pattern。
   pushCard({
@@ -286,9 +289,27 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: knightKillMineAmuletImage,
     classCard: true,
     unique: true,
-    description: '每击杀一只怪物，立刻在该位置生成一个「地雷」（5 点纯伤，受「引雷阵锋」加成；该位置已有卡时堆叠在上）。',
-    shortDescription: '击杀怪物 → 该位置生成地雷',
+    description: '每击杀一只怪物，立刻在该位置生成 2 个「地雷」（每个 5 点纯伤，受「引雷阵锋」加成；该位置已有卡时堆叠在上）。',
+    shortDescription: '击杀怪物 → 该位置生成 2 个地雷',
     amuletEffect: 'kill-cell-mine',
+  });
+
+  // 灵魂吞噬（unique）：每次受到伤害（HP 实际减少时），可从坟场放逐 1 张卡。
+  // 复用「虚灵刀」的 ghost blade exile 弹窗机制（GraveyardExileModal +
+  // BEGIN_GHOST_BLADE_EXILE reducer），只是 banner / log 文案换成「灵魂吞噬放逐...」。
+  // 触发点：reduceApplyDamage 在 result.appliedDamage > 0 时 emit
+  // combat:ghostBladeExile（payload.source='amulet'）。完美格挡 / tempShield 全收 /
+  // 不灭守护抵消 等 appliedDamage===0 场景天然不触发。坟场为空时静默跳过。
+  pushCard({
+    type: 'amulet',
+    name: '灵魂吞噬',
+    value: 1,
+    image: knightSoulDevourAmuletImage,
+    classCard: true,
+    unique: true,
+    description: '每次受到伤害（HP 实际减少时），可从坟场选择 1 张卡牌移除出游戏。被盾完美格挡时不触发。',
+    shortDescription: '受伤时，可从坟场放逐卡',
+    amuletEffect: 'soul-devour',
   });
 
   // === POTIONS (2 cards) ===
@@ -1352,13 +1373,13 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicArmorPierceImage,
     classCard: true,
-    description: '永久：选择一面护盾，对随机 2 个怪物各造成 50% 护甲值的法术伤害，然后该护盾耐久 -1。',
-    shortDescription: '50% 护甲法伤随机 2 怪；该盾耐久 -1',
+    description: '永久：选择一件护甲装备，对当前行所有怪物各造成 50% 护甲值的法术伤害，然后该装备耐久 -1。',
+    shortDescription: '50% 护甲法伤全场；该装备耐久 -1',
     magicType: 'permanent',
-    magicEffect: '护甲值 50% 伤害随机两怪，盾耐久 -1。',
+    magicEffect: '护甲值 50% 伤害全场，装备耐久 -1。',
     knightEffect: 'armor-double-strike',
     recycleDelay: 1,
-    maxUpgradeLevel: 1,
+    maxUpgradeLevel: 2,
   });
 
   // 连环转律 (唯一)：造成 X 点法术伤害，X 为此前连续转型的次数（含本牌）。
@@ -1449,12 +1470,16 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
   });
 
   // 辞剑相易 (Perm 1)：将「下次劝降率」转化为左右装备栏各 ⌈X/3⌉ 临时攻击。
+  // X 必须严格等于英雄卡角标 “下次劝降 +X%” 的显示值（GameBoard.tsx:8263 /
+  // HeroCard.tsx:54），即四个分量之和：
   //   X = persuadeAmuletBonus            (临时；护符 / 部分 magic / equipment 累积；清空)
   //     + persuadeDiscount.rateBonus     (临时；event 际遇轮盘 / 部分 magic 给的；清 rateBonus
   //                                       但保留 costReduction)
-  //     + permanentPersuadeBonus         (永久；保留)
-  // 法术回响（C 类）跑第二次时，临时部分已经被清，X 退化成 permanentPersuadeBonus；
-  // 若玩家有永久劝降率加成，第二次仍能转化出额外临时攻击。
+  //     + permanentPersuadeBonus         (永久；保留；来源：怪物战利品 persuadeRateBonus)
+  //     + (persuadeLevel - 1) * 5        (永久；保留；来源：persuadeLevel+1 系事件
+  //                                       例如 威压交涉 / 永誓低吟 / 怀柔圣殿)
+  // 法术回响（C 类）跑第二次时，临时部分已经被清，X 退化成「permanentPersuadeBonus +
+  // (persuadeLevel - 1) * 5」；若玩家有任一永久加成，第二次仍能转化出额外临时攻击。
   pushCard({
     type: 'magic',
     name: '辞剑相易',
