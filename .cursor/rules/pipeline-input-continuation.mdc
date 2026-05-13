@@ -89,7 +89,7 @@ const state = makeState({
 | `UPDATE_GAME_LOG`（震慑领域 stun-domain） | RESOLVE_DICE 末尾 enqueue `[UPDATE_GAME_LOG, FINALIZE_MAGIC_CARD]`，drain 卡在 UPDATE_GAME_LOG → 卡牌进 limbo（手牌没了但没进坟场） | pipeline.ts 注释 |
 | `TRIGGER_ON_ENTER_HAND` | 上手关键字（生长之刃 amplify 等）卡在队列，卡永远拿不到 buff | pipeline.ts 注释 |
 | `DISCARD_OWNED_CARD` | 血咒仪式（`waterfallEffect: boostRowMonsterAttack`）被瀑流挤掉，效果触发了但**卡本身没进坟场**——`reduceApplyWaterfallDiscardEffects` 的 `sendToGraveyardUnlessFinal` enqueue 了 `DISCARD_OWNED_CARD`，drain 在 playerInput 下卡住。同样影响所有 7 条 `waterfallEffect` 分支 + no-effect 默认分支 + 所有「玩家弃手牌」magic resolver（专属召唤 / 汰旧迎新 / 回响行囊 / 噬血砺锋 / 祭坛秘术 etc.） | pipeline.ts 注释 |
-| `DISCARD_ALL_HAND` | 诅咒骰局（waterfall destroyAllAmuletsAndDiscardHand）+ 任何全手牌弃置 magic。reducer fan-out 成 N×`DISCARD_OWNED_CARD`，但 `DISCARD_ALL_HAND` 自己也会在 playerInput 下被 strand → 整个批量弃手牌不发生 | pipeline.ts 注释 |
+| `DISCARD_ALL_HAND` | 诅咒骰局（waterfall destroyRandomAmuletAndDiscardHand）+ 任何全手牌弃置 magic。reducer fan-out 成 N×`DISCARD_OWNED_CARD`，但 `DISCARD_ALL_HAND` 自己也会在 playerInput 下被 strand → 整个批量弃手牌不发生 | pipeline.ts 注释 |
 | `DISPOSE_EQUIPMENT_CARD` | 贪婪 boss（waterfall destroyAllEquipment）+ 装备顶替 fromSlot 路径。**装备从槽位消失但不进任何目的地**——非 Perm 应进坟场 / Perm 应进回收袋 / 残骸回收符 应回手牌，结果三个目的地都没到 | pipeline.ts 注释 |
 | `REMOVE_PREVIEW_CARD_STACKS` | 瀑流挤掉 stacked preview 列时 enqueue 的元数据更新。strand 后 `state.previewCardStacks` 仍引用已不存在的列 → 下一帧 preview 渲染错位 | pipeline.ts 注释 |
 | `ADD_CARD_TO_HAND` | 装备销毁的 `graveyard-to-hand` last-words（如某些铁剑系列：装备死亡时从坟场抽一张回手牌）。strand 后**应该到玩家手牌的卡停在队列里**，玩家以为关键字没生效 | pipeline.ts 注释 |

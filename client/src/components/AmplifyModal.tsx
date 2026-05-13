@@ -12,7 +12,7 @@ import { TrendingUp } from 'lucide-react';
 import GameCard, { type GameCardData } from './GameCard';
 import type { AmplifySelection } from '@/game-core/types';
 import type { EquipmentSlotId } from '@/components/game-board/types';
-import { isDamageMagic } from '@/game-core/helpers';
+import { isDamageMagic, isGoldGrantMagic } from '@/game-core/helpers';
 
 interface AmplifyModalProps {
   open: boolean;
@@ -44,6 +44,13 @@ function getAmplifyPreview(card: GameCardData): string {
   }
   if (card.type === 'magic') {
     if (card.scalingDamage != null) return `叠刺基数 ${card.scalingDamage} → ${card.scalingDamage + 1}`;
+    if (isGoldGrantMagic(card)) {
+      // 金币增益类（赌徒之计 / 运势博弈 / 血金术）：每层 +1 金币。
+      // 运势博弈仅同类型奖励分支吃增幅，-1 惩罚不变。
+      const bonus = (card.amplifyBonus ?? 0) + 1;
+      if (card.name === '运势博弈') return `同类型奖励 +${bonus} 金币`;
+      return `获得金币 +${bonus}`;
+    }
     const bonus = (card.amplifyBonus ?? 0) + 1;
     return `伤害 +${bonus}`;
   }
@@ -71,11 +78,11 @@ export default function AmplifyModal({
   }
 
   const eligibleHandCards = handCards.filter(
-    c => c.type === 'weapon' || c.type === 'shield' || c.type === 'monster' || isDamageMagic(c),
+    c => c.type === 'weapon' || c.type === 'shield' || c.type === 'monster' || isDamageMagic(c) || isGoldGrantMagic(c),
   );
 
   const eligibleBackpackCards = (backpackItems ?? []).filter(
-    c => c.type === 'weapon' || c.type === 'shield' || c.type === 'monster' || isDamageMagic(c),
+    c => c.type === 'weapon' || c.type === 'shield' || c.type === 'monster' || isDamageMagic(c) || isGoldGrantMagic(c),
   );
 
   const pickEquipment = (slotId: EquipmentSlotId) => {

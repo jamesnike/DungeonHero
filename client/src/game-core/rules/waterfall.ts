@@ -622,7 +622,7 @@ function reduceApplyWaterfallDiscardEffects(
   // Bypass ALL of:
   //   - waterfallEffect (returnToDeck / swarmInfest / damage / goldLoss /
   //     bonusDecay / turnBoost / boostRowMonsterAttack / destroyAllEquipment /
-  //     spellDecay / destroyAllAmuletsAndDiscardHand)
+  //     spellDecay / destroyRandomAmuletAndDiscardHand)
   //   - DISCARD_OWNED_CARD enqueue (the card does NOT enter local
   //     discardedCards → onDiscardDamage / onDiscardDraw / amulet
   //     catapult / discard-zap linkages do NOT fire)
@@ -1003,32 +1003,42 @@ function reduceApplyWaterfallDiscardEffects(
         sendToGraveyardUnlessFinal();
         break;
       }
-      case 'destroyAllAmuletsAndDiscardHand': {
-        const removedAmulets = [...state.amuletSlots] as GameCardData[];
-        if (removedAmulets.length > 0) {
-          // Perm 护符（永恒铭刻 / native permEquipment / 凡化咒未剥离）→ 回收袋；
-          // 普通护符 → 坟场。镜像 events.ts:removeAllAmulets 的契约，避免 Perm 护符
-          // 因摧毁路径不同被错误送进坟场。
-          for (const a of removedAmulets) {
-            if (cardHasPermFlag(a)) {
-              enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: a });
-            } else {
-              enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: a });
-            }
+      case 'destroyRandomAmuletAndDiscardHand': {
+        // 随机抽 1 枚护符摧毁；Perm 进回收袋，非 Perm 进坟场。
+        // 历史上这里曾摧毁所有护符（type='destroyAllAmuletsAndDiscardHand'），
+        // 因玩家反馈过强，改为随机 1 枚；手牌弃回的部分保持不变。
+        const amuletPool = [...state.amuletSlots] as GameCardData[];
+        let destroyedAmulet: GameCardData | null = null;
+        let survivingAmulets: GameCardData[] = amuletPool;
+        if (amuletPool.length > 0) {
+          const [pickIdx, rng2] = nextInt(rng, 0, amuletPool.length - 1);
+          rng = rng2;
+          destroyedAmulet = amuletPool[pickIdx];
+          survivingAmulets = amuletPool.filter((_, i) => i !== pickIdx);
+
+          if (cardHasPermFlag(destroyedAmulet)) {
+            enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: destroyedAmulet });
+          } else {
+            enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: destroyedAmulet });
           }
-          patch.amuletSlots = [];
+          patch.amuletSlots = survivingAmulets as typeof state.amuletSlots;
           sideEffects.push({
             event: 'log:entry',
-            payload: { type: 'waterfall', message: `${cardName} 被挤出，摧毁了 ${removedAmulets.length} 枚护符：${removedAmulets.map(a => a.name).join('、')}` },
+            payload: { type: 'waterfall', message: `${cardName} 被挤出，随机摧毁了护符：${destroyedAmulet.name}` },
           });
-          // 招灵书印：诅咒骰局 强制销毁所有护符。所有护符清空 → surviving=0
-          // → 通常不触发，但保留入口一致性。
+          // 招灵书印：仅摧毁 1 枚护符，survivingAmuletSlots = N-1，
+          // 触发条件按现有契约判定。
           maybeTriggerDeleteDrawForDestroy({
-            destroyedCards: removedAmulets,
-            survivingAmuletSlots: patch.amuletSlots ?? [],
+            destroyedCards: [destroyedAmulet],
+            survivingAmuletSlots: survivingAmulets,
             sideEffects,
             enqueuedActions,
             reasonLabel: '幽魂瀑流摧毁护符',
+          });
+        } else {
+          sideEffects.push({
+            event: 'log:entry',
+            payload: { type: 'waterfall', message: `${cardName} 被挤出，但没有护符可摧毁。` },
           });
         }
         const handSnapshot = [...state.handCards] as GameCardData[];
@@ -1036,10 +1046,10 @@ function reduceApplyWaterfallDiscardEffects(
           enqueuedActions.push({ type: 'DISCARD_ALL_HAND' });
           sideEffects.push({ event: 'log:entry', payload: { type: 'waterfall', message: `${cardName} 被挤出，弃回了 ${handSnapshot.length} 张手牌` } });
         }
-        if (removedAmulets.length > 0 || handSnapshot.length > 0) {
-          sideEffects.push({ event: 'ui:banner', payload: { text: `${cardName} 被挤出：摧毁了所有护符，弃回了全部手牌！` } });
-        } else {
-          sideEffects.push({ event: 'log:entry', payload: { type: 'waterfall', message: `${cardName} 被挤出，但没有护符和手牌。` } });
+        if (destroyedAmulet || handSnapshot.length > 0) {
+          const amuletText = destroyedAmulet ? `摧毁了护符「${destroyedAmulet.name}」` : '没有护符可摧毁';
+          const handText = handSnapshot.length > 0 ? '弃回了全部手牌' : '手牌为空';
+          sideEffects.push({ event: 'ui:banner', payload: { text: `${cardName} 被挤出：${amuletText}，${handText}！` } });
         }
         sendToGraveyardUnlessFinal();
         break;

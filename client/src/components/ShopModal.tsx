@@ -438,9 +438,9 @@ export default function ShopModal({
 
             {shopLevel >= 2 && (() => {
               const canAffordAttack = gold >= shopEquipBoostCost;
-              const attackDisabled = shopEquipAttackUsed || !canAffordAttack;
+              const attackDisabled = !canAffordAttack;
               const canAffordArmor = gold >= shopEquipBoostCost;
-              const armorDisabled = shopEquipArmorUsed || !canAffordArmor;
+              const armorDisabled = !canAffordArmor;
               return (
                 <>
                   <div
@@ -451,17 +451,11 @@ export default function ShopModal({
                         <Sword className="w-6 h-6" />
                       </div>
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-base font-semibold text-red-700 dark:text-red-400">{t('modal.shop.attackTitle')}</p>
-                          <Badge variant="outline" className="text-[10px] border-red-500/50 text-red-700 dark:text-red-400">
-                            {t('modal.shop.perVisitOnce')}
-                          </Badge>
-                        </div>
+                        <p className="text-base font-semibold text-red-700 dark:text-red-400">{t('modal.shop.attackTitle')}</p>
                         <p className="text-sm text-muted-foreground">
                           {t('modal.shop.attackDesc', { cost: shopEquipBoostCost })}
                         </p>
-                        {shopEquipAttackUsed && <p className="text-xs text-red-700 dark:text-red-400">{t('modal.shop.attackUsedNote')}</p>}
-                        {!shopEquipAttackUsed && !canAffordAttack && <p className="text-xs text-destructive">{t('modal.shop.notEnoughGoldPeriod')}</p>}
+                        {!canAffordAttack && <p className="text-xs text-destructive">{t('modal.shop.notEnoughGoldPeriod')}</p>}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
@@ -486,17 +480,11 @@ export default function ShopModal({
                         <Shield className="w-6 h-6" />
                       </div>
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-base font-semibold text-sky-700 dark:text-sky-400">{t('modal.shop.armorTitle')}</p>
-                          <Badge variant="outline" className="text-[10px] border-sky-500/50 text-sky-700 dark:text-sky-400">
-                            {t('modal.shop.perVisitOnce')}
-                          </Badge>
-                        </div>
+                        <p className="text-base font-semibold text-sky-700 dark:text-sky-400">{t('modal.shop.armorTitle')}</p>
                         <p className="text-sm text-muted-foreground">
                           {t('modal.shop.armorDesc', { cost: shopEquipBoostCost })}
                         </p>
-                        {shopEquipArmorUsed && <p className="text-xs text-sky-700 dark:text-sky-400">{t('modal.shop.armorUsedNote')}</p>}
-                        {!shopEquipArmorUsed && !canAffordArmor && <p className="text-xs text-destructive">{t('modal.shop.notEnoughGoldPeriod')}</p>}
+                        {!canAffordArmor && <p className="text-xs text-destructive">{t('modal.shop.notEnoughGoldPeriod')}</p>}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">

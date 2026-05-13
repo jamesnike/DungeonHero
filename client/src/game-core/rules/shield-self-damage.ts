@@ -166,7 +166,10 @@ export function applyShieldSlotSelfDamage(
       if (shieldDurability <= 1 && !state.unbreakableNext) {
         // Last point of durability — equipment breaks. Run last-words / revive.
         destroyed = true;
-        const breakResult = computeEquipmentBreakEffects(state, slotId, slotItem as GameCardData, ae);
+        // Thread current patch so any earlier writes (none today, but keeps the
+        // invariant consistent with all other callers) are preserved through the
+        // break flow. See comment on `computeEquipmentBreakEffects`.
+        const breakResult = computeEquipmentBreakEffects(state, slotId, slotItem as GameCardData, ae, patch);
         Object.assign(patch, breakResult.patch);
         patch.rng = breakResult.rng;
         sideEffects.push(...breakResult.sideEffects);

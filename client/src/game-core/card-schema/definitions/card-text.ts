@@ -208,6 +208,16 @@ const undyingBlessing: CardTextFormatter = () => ({
   magicEffect: '永久魔法：选择一个装备，赋予其复生，失去 2 点生命，然后抽 1 张牌。',
 });
 
+// 同款 trap：绝对不要 return `magicEffect`。赌徒之计 deck.ts 条目
+// (`STARTER_CARD_IDS.gamblerGambit`) 故意不设 `magicEffect`，让
+// `resolveEffectId` 走 `starter:starter-perm-gambler-gambit` → 命中
+// card-schema/definitions/magic.ts 里的 `starterGamblerGambit` resolver。
+// 如果这里 return `magicEffect: '永久魔法：…'`，`applyDerivedCardText` /
+// `applyUpgrade` 会把这个长字符串塞进 `card.magicEffect`，让 `resolveEffectId`
+// 短路到 `magic:永久魔法：…` —— 那个 effectId 没注册过，schema 引擎返回 null，
+// legacy fallback 也已删除（见 magic-effects.ts 注释），整张卡变成 no-op：
+// 不损血、不给金币、不抽牌。详细 trap 描述见下面 deckTopSwapGold formatter
+// 注释块。
 const gamblerGambit: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
   const golds = [1, 2, 4];
@@ -216,7 +226,7 @@ const gamblerGambit: CardTextFormatter = (card) => {
   const d = draws[level] ?? 1;
   return {
     description: `失去 1 点生命，获得 ${g} 金币，从背包抽 ${d} 张牌。`,
-    magicEffect: `永久魔法：失去 1 点生命，获得 ${g} 金币，从背包抽 ${d} 张牌。`,
+    shortDescription: `-1 生命；+${g} 金币；抽 ${d} 张`,
   };
 };
 

@@ -466,27 +466,69 @@ describe('reducer', () => {
     });
 
     it('SHOP_EQUIP_BOOST attack increases slot bonuses', () => {
-      const state = makeState({ gold: 20, shopEquipAttackUsed: false });
+      const state = makeState({ gold: 20 });
       const result = reduce(state, { type: 'SHOP_EQUIP_BOOST', boostType: 'attack' });
-      expect(result.state.gold).toBe(5);
+      expect(result.state.gold).toBe(12);
       expect(result.state.equipmentSlotBonuses.equipmentSlot1.damage).toBe(1);
       expect(result.state.equipmentSlotBonuses.equipmentSlot2.damage).toBe(1);
-      expect(result.state.shopEquipAttackUsed).toBe(true);
     });
 
     it('SHOP_EQUIP_BOOST armor increases shield bonuses', () => {
-      const state = makeState({ gold: 20, shopEquipArmorUsed: false });
+      const state = makeState({ gold: 20 });
       const result = reduce(state, { type: 'SHOP_EQUIP_BOOST', boostType: 'armor' });
-      expect(result.state.gold).toBe(5);
+      expect(result.state.gold).toBe(12);
       expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(1);
       expect(result.state.equipmentSlotBonuses.equipmentSlot2.shield).toBe(1);
-      expect(result.state.shopEquipArmorUsed).toBe(true);
     });
 
-    it('SHOP_EQUIP_BOOST fails if already used', () => {
-      const state = makeState({ gold: 20, shopEquipAttackUsed: true });
+    it('SHOP_EQUIP_BOOST is repeatable: attack stacks across multiple purchases', () => {
+      let state = makeState({ gold: 20 });
+      state = reduce(state, { type: 'SHOP_EQUIP_BOOST', boostType: 'attack' }).state;
+      state = reduce(state, { type: 'SHOP_EQUIP_BOOST', boostType: 'attack' }).state;
+      expect(state.gold).toBe(4);
+      expect(state.equipmentSlotBonuses.equipmentSlot1.damage).toBe(2);
+      expect(state.equipmentSlotBonuses.equipmentSlot2.damage).toBe(2);
+    });
+
+    it('SHOP_EQUIP_BOOST is repeatable: armor stacks across multiple purchases', () => {
+      let state = makeState({ gold: 20 });
+      state = reduce(state, { type: 'SHOP_EQUIP_BOOST', boostType: 'armor' }).state;
+      state = reduce(state, { type: 'SHOP_EQUIP_BOOST', boostType: 'armor' }).state;
+      expect(state.gold).toBe(4);
+      expect(state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(2);
+      expect(state.equipmentSlotBonuses.equipmentSlot2.shield).toBe(2);
+    });
+
+    it('SHOP_EQUIP_BOOST fails if not enough gold', () => {
+      const state = makeState({ gold: 5 });
       const result = reduce(state, { type: 'SHOP_EQUIP_BOOST', boostType: 'attack' });
-      expect(result.state.gold).toBe(20);
+      expect(result.state.gold).toBe(5);
+      expect(result.state.equipmentSlotBonuses.equipmentSlot1.damage).toBe(0);
+    });
+
+    it('SHOP_EQUIP_BOOST armor refills equipped shield armor each purchase (no "added but didn\'t help")', () => {
+      const shield: any = {
+        id: 'eq-shield',
+        type: 'shield',
+        name: 'Test Shield',
+        value: 3,
+        armorMax: 3,
+        armor: 2,
+        durability: 1,
+        maxDurability: 1,
+        fromSlot: 'equipmentSlot1',
+      };
+      let state = makeState({
+        gold: 20,
+        equipmentSlot1: shield,
+      });
+      state = reduce(state, { type: 'SHOP_EQUIP_BOOST', boostType: 'armor' }).state;
+      expect(state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(1);
+      expect((state.equipmentSlot1 as any)?.armor).toBe(3);
+
+      state = reduce(state, { type: 'SHOP_EQUIP_BOOST', boostType: 'armor' }).state;
+      expect(state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(2);
+      expect((state.equipmentSlot1 as any)?.armor).toBe(4);
     });
 
     it('SHOP_SKILL_DISCOVER shuffles, picks 3 options, and deducts gold', () => {
@@ -2043,28 +2085,59 @@ describe('reducer', () => {
       expect((result.state.activeCards[0] as any).attack).toBe(8);
     });
 
-    it('triggers golem layer-loss reflect when monster spends a layer to attack', () => {
+    it('does NOT inline-trigger golem reflect — moved to dedicated RESOLVE_GOLEM_LAYER_REFLECT action enqueued from RESOLVE_BLOCK', () => {
+      // 2026 refactor: layer-loss reflect was moved out of DECREMENT_FURY
+      // and into a dedicated RESOLVE_GOLEM_LAYER_REFLECT action enqueued by
+      // reduceResolveBlock AFTER both DECREMENT_FURY and the shield-reflect.
+      // This guarantees reflect routes against the LATEST state (broken
+      // shields already null) — see
+      // `golem-layer-reflect-after-shield-break.test.ts`.
       const monster = { id: 'm1', type: 'monster' as const, name: 'Golem', value: 5, hp: 10, maxHp: 10, attack: 5, currentLayer: 3, fury: 3, golemLayerLossReflect: 2 };
       const slots = Array.from({ length: 5 }, () => null) as any;
       slots[0] = monster;
       const state = makeState({ activeCards: slots });
       const result = reduce(state, { type: 'DECREMENT_FURY', monsterId: 'm1' });
-      // fury(3) - nextLayer(2) = 1 lost layer × coeff 2 = 2 reflect damage
+      // No inline reflect (no APPLY_DAMAGE / combat:golemReflect from DECREMENT_FURY).
       const reflectAction = result.enqueuedActions.find(a =>
         a.type === 'APPLY_DAMAGE' && (a as any).source === 'combat',
       );
-      expect(reflectAction).toBeDefined();
-      expect((reflectAction as any).amount).toBe(2);
+      expect(reflectAction).toBeUndefined();
+      expect(result.sideEffects.some(e => e.event === 'combat:golemReflect')).toBe(false);
+      // Layer DID decrement (3 → 2).
+      expect((result.state.activeCards[0] as any).currentLayer).toBe(2);
+    });
+
+    it('RESOLVE_GOLEM_LAYER_REFLECT routes reflect to hero when no shields', () => {
+      const monster = { id: 'm1', type: 'monster' as const, name: 'Golem', value: 5, hp: 10, maxHp: 10, attack: 5, currentLayer: 2, fury: 3, golemLayerLossReflect: 2 };
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = monster;
+      const state = makeState({ activeCards: slots, equipmentSlot1: null as any, equipmentSlot2: null as any });
+      // furyBaseline=3, currentLayer=2 → 1 layer lost × 2 = 2 reflect damage
+      const result = reduce(state, { type: 'RESOLVE_GOLEM_LAYER_REFLECT', monsterId: 'm1', furyBaseline: 3 });
+      const damageAction = result.enqueuedActions.find(a =>
+        a.type === 'APPLY_DAMAGE' && (a as any).source === 'combat',
+      );
+      expect(damageAction).toBeDefined();
+      expect((damageAction as any).amount).toBe(2);
       expect(result.sideEffects.some(e => e.event === 'combat:golemReflect')).toBe(true);
     });
 
-    it('does not trigger golem reflect when stunned', () => {
-      const monster = { id: 'm1', type: 'monster' as const, name: 'Golem', value: 5, hp: 10, maxHp: 10, attack: 5, currentLayer: 3, fury: 3, golemLayerLossReflect: 2, isStunned: true };
+    it('RESOLVE_GOLEM_LAYER_REFLECT is no-op when monster is stunned', () => {
+      const monster = { id: 'm1', type: 'monster' as const, name: 'Golem', value: 5, hp: 10, maxHp: 10, attack: 5, currentLayer: 2, fury: 3, golemLayerLossReflect: 2, isStunned: true };
       const slots = Array.from({ length: 5 }, () => null) as any;
       slots[0] = monster;
       const state = makeState({ activeCards: slots });
-      const result = reduce(state, { type: 'DECREMENT_FURY', monsterId: 'm1' });
+      const result = reduce(state, { type: 'RESOLVE_GOLEM_LAYER_REFLECT', monsterId: 'm1', furyBaseline: 3 });
       expect(result.sideEffects.some(e => e.event === 'combat:golemReflect')).toBe(false);
+    });
+
+    it('RESOLVE_GOLEM_LAYER_REFLECT is no-op when monster is dead (currentLayer<=0)', () => {
+      // Skipped: monster removed entirely → reducer no-ops (no-target safety).
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      const state = makeState({ activeCards: slots });
+      const result = reduce(state, { type: 'RESOLVE_GOLEM_LAYER_REFLECT', monsterId: 'missing', furyBaseline: 3 });
+      expect(result.sideEffects.length).toBe(0);
+      expect(result.enqueuedActions.length).toBe(0);
     });
 
     it('preserves hp on layer cost (does not refill to maxHp)', () => {

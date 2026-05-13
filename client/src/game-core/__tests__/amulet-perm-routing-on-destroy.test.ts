@@ -5,7 +5,7 @@
  * 不区分是否 Perm（永恒铭刻 设的 `recycleDelay > 0` / native `permEquipment` /
  * 其它 cardHasPermFlag 条件）：
  *
- *   1. waterfall.ts: `destroyAllAmuletsAndDiscardHand`（诅咒骰局 被挤出时摧毁所有护符）
+ *   1. waterfall.ts: `destroyRandomAmuletAndDiscardHand`（诅咒骰局 被挤出时随机摧毁 1 枚护符）
  *   2. events.ts: `amuletCapacity-1`（事件降低护符栏上限，溢出的旧护符）
  *   3. events.ts: `amuletsToGold+10`（事件「护符换金币」）
  *   4. cards.ts:  `CONVERT_AMULETS_TO_GOLD`（系统/技能「护符转化为金币」）
@@ -44,71 +44,55 @@ function makeAmulet(id: string, over?: Partial<GameCardData>): GameCardData {
 const permAmulet = (id: string) => makeAmulet(id, { recycleDelay: 2 });
 
 // ---------------------------------------------------------------------------
-// 1. 诅咒骰局 (destroyAllAmuletsAndDiscardHand)
+// 1. 诅咒骰局 (destroyRandomAmuletAndDiscardHand)
 // ---------------------------------------------------------------------------
 
-describe('诅咒骰局 destroyAllAmuletsAndDiscardHand — Perm 护符进回收袋', () => {
-  it('Perm amulet (recycleDelay=2) 进回收袋；普通 amulet 进坟场', () => {
-    const discardCard: any = {
-      id: 'curse-dice-1',
-      type: 'event',
-      name: '诅咒骰局',
-      value: 0,
-      waterfallEffect: { type: 'destroyAllAmuletsAndDiscardHand', amount: 0 },
-    };
+const cursedDiceCard: any = {
+  id: 'curse-dice-1',
+  type: 'event',
+  name: '诅咒骰局',
+  value: 0,
+  waterfallEffect: { type: 'destroyRandomAmuletAndDiscardHand', amount: 0 },
+};
+
+describe('诅咒骰局 destroyRandomAmuletAndDiscardHand — 随机摧毁 1 枚护符 + Perm 路由', () => {
+  it('单个 Perm amulet (recycleDelay=2) 被摧毁 → 进回收袋', () => {
     const perm = permAmulet('amu-perm');
-    const plain = makeAmulet('amu-plain');
     const state = makeState({
-      amuletSlots: [perm, plain] as any,
+      amuletSlots: [perm] as any,
       handCards: [],
       discardedCards: [],
       permanentMagicRecycleBag: [],
     });
 
     const result = drain(state, [
-      { type: 'APPLY_WATERFALL_DISCARD_EFFECTS', discardCard, nextRemainingDeck: [] } as GameAction,
+      { type: 'APPLY_WATERFALL_DISCARD_EFFECTS', discardCard: cursedDiceCard, nextRemainingDeck: [] } as GameAction,
     ]);
 
     expect(result.state.amuletSlots).toHaveLength(0);
     expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'amu-perm')).toBeDefined();
     expect(result.state.discardedCards.find(c => c.id === 'amu-perm')).toBeUndefined();
-    expect(result.state.discardedCards.find(c => c.id === 'amu-plain')).toBeDefined();
-    expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'amu-plain')).toBeUndefined();
   });
 
-  it('两枚 Perm amulet 都进回收袋', () => {
-    const discardCard: any = {
-      id: 'curse-dice-1',
-      type: 'event',
-      name: '诅咒骰局',
-      value: 0,
-      waterfallEffect: { type: 'destroyAllAmuletsAndDiscardHand', amount: 0 },
-    };
+  it('单个普通 amulet 被摧毁 → 进坟场', () => {
+    const plain = makeAmulet('amu-plain');
     const state = makeState({
-      amuletSlots: [permAmulet('p1'), permAmulet('p2')] as any,
+      amuletSlots: [plain] as any,
       handCards: [],
       discardedCards: [],
       permanentMagicRecycleBag: [],
     });
 
     const result = drain(state, [
-      { type: 'APPLY_WATERFALL_DISCARD_EFFECTS', discardCard, nextRemainingDeck: [] } as GameAction,
+      { type: 'APPLY_WATERFALL_DISCARD_EFFECTS', discardCard: cursedDiceCard, nextRemainingDeck: [] } as GameAction,
     ]);
 
-    expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'p1')).toBeDefined();
-    expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'p2')).toBeDefined();
-    expect(result.state.discardedCards.find(c => c.id === 'p1')).toBeUndefined();
-    expect(result.state.discardedCards.find(c => c.id === 'p2')).toBeUndefined();
+    expect(result.state.amuletSlots).toHaveLength(0);
+    expect(result.state.discardedCards.find(c => c.id === 'amu-plain')).toBeDefined();
+    expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'amu-plain')).toBeUndefined();
   });
 
-  it('permStripped 的 amulet 即使带 recycleDelay 也算非 Perm，进坟场', () => {
-    const discardCard: any = {
-      id: 'curse-dice-1',
-      type: 'event',
-      name: '诅咒骰局',
-      value: 0,
-      waterfallEffect: { type: 'destroyAllAmuletsAndDiscardHand', amount: 0 },
-    };
+  it('permStripped 的 amulet 即使带 recycleDelay 也算非 Perm，被摧毁后进坟场', () => {
     const stripped = makeAmulet('amu-stripped', { recycleDelay: 2, permStripped: true } as any);
     const state = makeState({
       amuletSlots: [stripped] as any,
@@ -118,11 +102,50 @@ describe('诅咒骰局 destroyAllAmuletsAndDiscardHand — Perm 护符进回收�
     });
 
     const result = drain(state, [
-      { type: 'APPLY_WATERFALL_DISCARD_EFFECTS', discardCard, nextRemainingDeck: [] } as GameAction,
+      { type: 'APPLY_WATERFALL_DISCARD_EFFECTS', discardCard: cursedDiceCard, nextRemainingDeck: [] } as GameAction,
     ]);
 
     expect(result.state.discardedCards.find(c => c.id === 'amu-stripped')).toBeDefined();
     expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'amu-stripped')).toBeUndefined();
+  });
+
+  it('多枚护符：随机摧毁 1 枚（其它 N-1 枚保留在 amuletSlots）', () => {
+    const perm = permAmulet('amu-perm');
+    const plain = makeAmulet('amu-plain');
+    const extra = makeAmulet('amu-extra');
+    const state = makeState({
+      amuletSlots: [perm, plain, extra] as any,
+      handCards: [],
+      discardedCards: [],
+      permanentMagicRecycleBag: [],
+    });
+
+    const result = drain(state, [
+      { type: 'APPLY_WATERFALL_DISCARD_EFFECTS', discardCard: cursedDiceCard, nextRemainingDeck: [] } as GameAction,
+    ]);
+
+    // 恰好 1 枚被摧毁（无论是哪一枚），剩 2 枚仍在 amuletSlots
+    expect(result.state.amuletSlots).toHaveLength(2);
+    const totalDestroyed =
+      result.state.discardedCards.filter(c => ['amu-perm', 'amu-plain', 'amu-extra'].includes(c.id)).length +
+      result.state.permanentMagicRecycleBag.filter(c => ['amu-perm', 'amu-plain', 'amu-extra'].includes(c.id)).length;
+    expect(totalDestroyed).toBe(1);
+  });
+
+  it('空护符栏：no-op（不报错）', () => {
+    const state = makeState({
+      amuletSlots: [] as any,
+      handCards: [],
+      discardedCards: [],
+      permanentMagicRecycleBag: [],
+    });
+
+    const result = drain(state, [
+      { type: 'APPLY_WATERFALL_DISCARD_EFFECTS', discardCard: cursedDiceCard, nextRemainingDeck: [] } as GameAction,
+    ]);
+
+    expect(result.state.amuletSlots).toHaveLength(0);
+    expect(result.state.permanentMagicRecycleBag).toHaveLength(0);
   });
 });
 

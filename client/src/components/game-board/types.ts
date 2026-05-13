@@ -960,16 +960,22 @@ export type GraveyardStackFlight = {
   arcHeight: number;
 };
 
-/** 护盾反弹 / Boss 反噬 / 奥术之刃附魔：纯表现用定向抛物线投射（伤害由结算逻辑另行应用） */
+/** 护盾反弹 / Boss 反噬 / 奥术之刃附魔：纯表现用定向抛物线投射（伤害由结算逻辑另行应用）
+ *
+ * 'golem-shockwave' 例外：不沿弧线飞行，而是以 Golem 格内为中心向外扩散的环形冲击波。
+ * 用于 Golem 反震 (layer-loss reflect)。`start === end`，靠 ringScale 字段控制环的扩张倍数。
+ */
 export type DirectedCombatFxFlight = {
   id: string;
-  kind: 'shield-reflect' | 'boss-retaliation' | 'arcane-blade-spell' | 'golem-layer-reflect' | 'dragon-breath' | 'missile-storm';
+  kind: 'shield-reflect' | 'boss-retaliation' | 'arcane-blade-spell' | 'golem-shockwave' | 'dragon-breath' | 'missile-storm';
   start: Point;
   end: Point;
   startTime: number;
   duration: number;
   progress: number;
   arcHeight: number;
+  /** Only set for 'golem-shockwave': peak ring expansion multiple (e.g. 3.6). */
+  ringScale?: number;
 };
 
 /** 雷霆符印：从护符栏飞向目标怪物的投射物动画 */

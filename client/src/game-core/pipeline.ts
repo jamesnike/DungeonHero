@@ -273,6 +273,14 @@ function isInputContinuation(action: GameAction): boolean {
     case 'APPLY_DRAGON_BREATH_RETALIATION':
     case 'APPLY_SHIELD_REFLECT':
     case 'DECREMENT_FURY':
+    // RESOLVE_GOLEM_LAYER_REFLECT — enqueued by `reduceResolveBlock` AFTER
+    // DECREMENT_FURY + DEAL_DAMAGE_TO_MONSTER (shield reflect) so Golem's
+    // 反震 settles SEPARATELY and LAST against the post-block state. Must
+    // be a continuation so it drains during monster-turn / awaitingBlock
+    // phases without stranding (which would leave the reflect un-applied
+    // and the UI animation hanging). See
+    // `golem-layer-reflect-after-shield-break.test.ts`.
+    case 'RESOLVE_GOLEM_LAYER_REFLECT':
     case 'BEGIN_COMBAT':
     case 'ADVANCE_MONSTER_TURN':
     case 'APPLY_MONSTER_TURN_END_EFFECTS':
@@ -386,7 +394,7 @@ function isInputContinuation(action: GameAction): boolean {
     // `sendToGraveyardUnlessFinal`), plus every magic resolver that
     // discards a hand card while the game is in playerInput.
     case 'DISCARD_OWNED_CARD':
-    // DISCARD_ALL_HAND — enqueued by waterfall.ts `destroyAllAmuletsAndDiscardHand`
+    // DISCARD_ALL_HAND — enqueued by waterfall.ts `destroyRandomAmuletAndDiscardHand`
     // (诅咒骰局 瀑流) and by hand-wide-discard magic effects. Reducer fans out
     // into N x DISCARD_OWNED_CARD, one per non-curse hand card. Stranded under
     // playerInput → "整个批量弃手牌不发生", no card in hand reaches the

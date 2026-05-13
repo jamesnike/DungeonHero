@@ -6,7 +6,7 @@
  * Bug history (2026-04): the reducer was implemented as
  *   `handCards: state.handCards.filter(c => c.type === 'curse')`
  * which removed non-curse cards from hand WITHOUT adding them anywhere.
- * Triggered by 诅咒骰局 waterfall (`destroyAllAmuletsAndDiscardHand`) and
+ * Triggered by 诅咒骰局 waterfall (`destroyRandomAmuletAndDiscardHand`) and
  * any other consumer that enqueued the action directly.
  *
  * Both触发路径 are covered:
@@ -125,9 +125,9 @@ describe('DISCARD_ALL_HAND — 非 curse 手牌必须进坟场或回收袋', () 
       name: '诅咒骰局',
       value: 0,
       waterfallEffect: {
-        type: 'destroyAllAmuletsAndDiscardHand',
+        type: 'destroyRandomAmuletAndDiscardHand',
         amount: 0,
-        description: '被挤出时：摧毁所有护符，弃回所有手牌',
+        description: '被挤出时：随机摧毁一枚护符，弃回所有手牌',
       },
     };
 

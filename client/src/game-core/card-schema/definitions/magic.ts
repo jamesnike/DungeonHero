@@ -27,6 +27,7 @@ import {
   sanitizeCardMetadata,
   getCardPlayCategory,
   isDamageMagic,
+  isGoldGrantMagic,
   applyAmplifyOnCreate,
 } from '../../helpers';
 import { createGreedCurseCard } from '@/lib/knightDeck';
@@ -188,10 +189,10 @@ const amplifyCard: CardDefinition = {
     const hasEquip1 = state.equipmentSlot1 && (state.equipmentSlot1.type === 'weapon' || state.equipmentSlot1.type === 'shield');
     const hasEquip2 = state.equipmentSlot2 && (state.equipmentSlot2.type === 'weapon' || state.equipmentSlot2.type === 'shield');
     const eligibleHand = state.handCards.filter(
-      c => c.id !== card.id && (c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c)),
+      c => c.id !== card.id && (c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c) || isGoldGrantMagic(c)),
     );
     if (!hasEquip1 && !hasEquip2 && eligibleHand.length === 0) {
-      banner(sideEffects, '增幅：没有可增幅的目标（装备栏无装备，手牌中无装备或伤害魔法）。');
+      banner(sideEffects, '增幅：没有可增幅的目标（装备栏无装备，手牌中无装备 / 伤害魔法 / 金币魔法）。');
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1523,7 +1524,9 @@ const starterGamblerGambit: CardDefinition = {
     const goldAmounts = [1, 2, 4];
     const drawAmounts = [1, 1, 1];
     const echoTag = isEchoTriggered ? '（回响×2）' : '';
-    const goldAmt = (goldAmounts[card.upgradeLevel ?? 0] ?? 1) * echoMultiplier;
+    // 增幅：每层 +1 金币（与 isGoldGrantMagic / computeDamageMagicDisplayPure 同口径）。
+    const amp = card.amplifyBonus ?? 0;
+    const goldAmt = ((goldAmounts[card.upgradeLevel ?? 0] ?? 1) + amp) * echoMultiplier;
     const drawAmt = (drawAmounts[card.upgradeLevel ?? 0] ?? 1) * echoMultiplier;
     const damageAmt = 1 * echoMultiplier;
     enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: damageAmt, source: 'gambler-gambit', selfInflicted: true });
@@ -1647,16 +1650,31 @@ const starterRecycleDrawMagic: CardDefinition = {
   },
 };
 
+// 血金术（事件商会卷轴翻转产物）。注册 effectId 用 `card:血金术` 而**不是**
+// `starter:guild-blood-gold`，原因：
+//   - 老存档里这张卡是带 magicEffect: '永久魔法：受到 1 点伤害，获得 3 金币。'
+//     (描述字符串，不是 effect id) 创建的；resolveEffectId 会短路到
+//     `magic:<long-string>`，那个 id 没注册过。
+//   - 注册在 `card:血金术` 让 getCardDefinition 的 fallback 链（registry.ts:35）
+//     把"按 effect id 找不到、按 card 名兜底"这条路径接住——同时覆盖：
+//       1. 新卡：events.ts 已经不写 magicEffect → resolveEffectId 返回
+//          `starter:guild-blood-gold`（未注册）→ fallback `card:血金术` → ✓
+//       2. 老存档：magicEffect 仍是描述串 → resolveEffectId 返回
+//          `magic:<long-string>`（未注册）→ fallback `card:血金术` → ✓
 const starterGuildBloodGold: CardDefinition = {
-  effectId: 'starter:guild-blood-gold',
+  effectId: 'card:血金术',
   effects: [],
   tags: ['magic', 'permanent', 'self-damage', 'gold'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered) => {
     const echoTag = isEchoTriggered ? '（回响×2）' : '';
-    enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 1 * echoMultiplier, source: 'guild-blood-gold', selfInflicted: true });
-    enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 3 * echoMultiplier, source: 'guild-blood-gold' });
-    log(sideEffects, 'magic', `血金术：受到 ${1 * echoMultiplier} 点伤害，获得 ${3 * echoMultiplier} 金币`);
-    banner(sideEffects, `血金术：以 ${1 * echoMultiplier} 点生命换取 ${3 * echoMultiplier} 金币。${echoTag}`);
+    // 增幅：每层 +1 金币（与 isGoldGrantMagic / computeDamageMagicDisplayPure 同口径）。
+    const amp = card.amplifyBonus ?? 0;
+    const damageAmt = 1 * echoMultiplier;
+    const goldAmt = (3 + amp) * echoMultiplier;
+    enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: damageAmt, source: 'guild-blood-gold', selfInflicted: true });
+    enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldAmt, source: 'guild-blood-gold' });
+    log(sideEffects, 'magic', `血金术：受到 ${damageAmt} 点伤害，获得 ${goldAmt} 金币`);
+    banner(sideEffects, `血金术：以 ${damageAmt} 点生命换取 ${goldAmt} 金币。${echoTag}`);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);

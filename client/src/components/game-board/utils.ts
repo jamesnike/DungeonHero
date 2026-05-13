@@ -1164,7 +1164,7 @@ export function createDeck(rng: RngState): [GameCardData[], RngState] {
     value: 0,
     image: dedupeEventCursedDiceImage,
     description: '掷骰后翻转为「诅咒碑」建筑。',
-    waterfallEffect: { type: 'destroyAllAmuletsAndDiscardHand', amount: 0, description: '被挤出时：摧毁所有护符，弃回所有手牌' },
+    waterfallEffect: { type: 'destroyRandomAmuletAndDiscardHand', amount: 0, description: '被挤出时：随机摧毁一枚护符，弃回所有手牌' },
     eventChoices: [
       {
         text: '掷出诅咒骰：装备攻击减半/法伤减半/装备护甲减半/超杀吸血-3/护符上限-1',

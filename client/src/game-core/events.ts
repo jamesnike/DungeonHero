@@ -481,7 +481,14 @@ export function getFlipToCardDefinition(token: string, rng: RngState): FlipCardD
       return { card: { id, type: 'magic', name: '奥术护盾', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'arcane-shield-stun-cap', description: '永久魔法（Perm 2）：击晕上限 +X%，X = 本回合已使用的非伤害魔法卡数量。', shortDescription: '击晕上限 +X%（X ＝ 本回合非伤害魔法数）', recycleDelay: 2 }, rng, banner: '奥术回廊翻转为奥术护盾，已放入背包。', logMessage: '事件效果：奥术回廊翻转成了「奥术护盾」', transformMessage: '奥术回廊翻转为「奥术护盾」…' };
     },
     guildFlipToMagic: () => {
-      return { card: { id: 'guild-blood-gold', type: 'magic', name: '血金术', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: '永久魔法：受到 1 点伤害，获得 3 金币。', description: '以鲜血换取黄金，奇术商会的禁忌手段。', shortDescription: '-1 生命；+3 金币' }, rng, banner: '商会卷轴翻转为「血金术」，已放入背包。', logMessage: '事件效果：获得「血金术」', transformMessage: '奇术商会翻转为「血金术」…' };
+      // 不要在这里设 `magicEffect: '永久魔法：…'`（描述字符串）。`resolveEffectId`
+      // 会把它当成 effect id 短路到 `magic:<long-string>`，那个 id 没注册过，schema
+      // 引擎返回 null，最终走 legacy fallback。这跟其它 starter Perm 卡（运势博弈
+      // / 锐意鼓舞 等）的反模式一样——见 `card-text.ts` deckTopSwapGold 注释。
+      // 路由：无 magicEffect → resolveEffectId 返回 `starter:guild-blood-gold` →
+      // 未注册（schema 把 def 注册在 `card:血金术` 上以兼容旧存档的 magicEffect=描述
+      // 那批卡）→ fallback 到 `card:血金术` → 命中 schema resolver。
+      return { card: { id: 'guild-blood-gold', type: 'magic', name: '血金术', value: 0, image: skillScrollImage, magicType: 'permanent', description: '以鲜血换取黄金，奇术商会的禁忌手段。', shortDescription: '-1 生命；+3 金币' }, rng, banner: '商会卷轴翻转为「血金术」，已放入背包。', logMessage: '事件效果：获得「血金术」', transformMessage: '奇术商会翻转为「血金术」…' };
     },
     guildFlipToHandRecycleMagic: () => {
       [id, rng] = nextId(rng, 'guild-hand-recycle');

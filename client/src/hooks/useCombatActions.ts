@@ -27,6 +27,7 @@ import {
   normalizeHeroEquipmentSlotFromDrag,
 } from '@/game-core/helpers';
 import { damageMonsterWithLayerOverflow } from '@/game-core/combat';
+import { GOLEM_SHOCKWAVE_TRIGGER_DELAY_MS } from '@/components/game-board/hooks/useDirectedCombatFx';
 
 // ---------------------------------------------------------------------------
 // UI-only animation constants (mirrored from GameBoard.tsx)
@@ -89,7 +90,7 @@ export interface CombatActionsDeps {
   triggerMineExplosionAnimation: (slotIdx: number, delay?: number) => void;
   tryStartShieldReflectDirectedFx: (slotId: EquipmentSlotId, monsterId: string) => void;
   tryStartBossRetaliationDirectedFx: (monsterId: string) => void;
-  tryStartGolemLayerReflectFx: (monsterId: string) => void;
+  tryStartGolemShockwaveFx: (monsterId: string) => void;
   tryStartArcaneBladeSpellFx: (slotId: EquipmentSlotId, monsterId: string) => void;
   tryStartDragonBreathFx: (monsterId: string, targetSlotId: EquipmentSlotId | 'hero') => void;
   tryStartMissileStormFx: (monsterId: string) => void;
@@ -375,12 +376,23 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
   });
 
   useGameEvent('combat:golemReflect', ({ monsterId, hitSlotId }) => {
-    depsRef.current.tryStartGolemLayerReflectFx(monsterId);
-    // When a shield slot absorbed the hit, the hero did not actually bleed;
-    // skipping the bleed animation avoids misleading red-flash feedback.
-    if (hitSlotId == null) {
-      depsRef.current.triggerHeroBleedAnimation();
-    }
+    // Visual sequencing for the user-reported "reflect appears to hit broken
+    // shield" bug: even though the reducer routes reflect AFTER the shield
+    // is destroyed (state-correct), playing the shockwave animation
+    // SIMULTANEOUSLY with the still-running shield-break dissolve makes the
+    // overlap LOOK like the reflect targeted the broken slot. Delaying the
+    // shockwave by ~600ms lets the shield-break finish FIRST, then the
+    // shockwave erupts from the Golem cell.
+    const monsterIdRef = monsterId;
+    const hitSlotIdRef = hitSlotId;
+    window.setTimeout(() => {
+      depsRef.current.tryStartGolemShockwaveFx(monsterIdRef);
+      // Hero bleed only when no shield absorbed the hit. Ditto delayed so
+      // the bleed flashes paired with the shockwave landing on the hero.
+      if (hitSlotIdRef == null) {
+        depsRef.current.triggerHeroBleedAnimation();
+      }
+    }, GOLEM_SHOCKWAVE_TRIGGER_DELAY_MS);
   });
 
   useGameEvent('combat:classDamageDiscoverTriggered', ({ threshold }) => {

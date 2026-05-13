@@ -15,6 +15,7 @@ import type {
 import type { GameState } from './types';
 import { DUNGEON_COLUMN_COUNT, DUNGEON_COLUMNS } from './constants';
 import { getWaterfallPreviewDiscardDestination, flattenActiveRowSlots, getEmptyOrGhostColumns } from './helpers';
+import { nextInt } from './rng';
 
 // ---------------------------------------------------------------------------
 // Plan the waterfall sequence (pure)
@@ -181,12 +182,24 @@ export function applyWaterfallEffect(
         permanentSpellDamageBonus: state.permanentSpellDamageBonus - effect.amount,
       };
 
-    case 'destroyAllAmuletsAndDiscardHand':
-      // Curses are immune to forced discard — they remain in hand.
+    case 'destroyRandomAmuletAndDiscardHand': {
+      // 随机抽 1 枚护符摧毁；手牌里的非 curse 卡全部弃回（curse 免疫强制弃牌）。
+      // 这条路径目前只被废弃的 TRIGGER_WATERFALL reducer 调用（见 dungeon.ts），
+      // 真实游戏走的是 reduceApplyWaterfallDiscardEffects（rules/waterfall.ts），
+      // 那里有完整的 Perm 路由。这里保持轻量但语义一致。
+      if (state.amuletSlots.length === 0) {
+        return {
+          handCards: state.handCards.filter(c => c.type === 'curse'),
+        };
+      }
+      const [pickIdx, nextRng] = nextInt(state.rng, 0, state.amuletSlots.length - 1);
+      const survivors = state.amuletSlots.filter((_, i) => i !== pickIdx);
       return {
-        amuletSlots: [],
+        amuletSlots: survivors,
         handCards: state.handCards.filter(c => c.type === 'curse'),
+        rng: nextRng,
       };
+    }
 
     default:
       return {};

@@ -171,6 +171,26 @@ export interface DecrementFuryAction {
   monsterId: string;
 }
 
+/**
+ * Settle Golem's layer-loss reflect (反震). Enqueued from `reduceResolveBlock`
+ * AFTER the shield-break routing + after the shield's reflect-to-Golem damage
+ * has been applied. This guarantees the reflect routes against the LATEST
+ * state (broken shield slots are already null), so the reflect cannot
+ * "phantom-hit" a slot that was destroyed earlier in the same round.
+ *
+ * `furyBaseline` is the Golem's `fury` (or `hpLayers`) value captured at the
+ * time the attack started; the reducer reads the Golem's CURRENT layer to
+ * compute `totalLostLayers = furyBaseline - currentLayer`. If Golem is dead
+ * or already removed, the reducer is a no-op.
+ *
+ * See: `golem-layer-reflect-after-shield-break.test.ts`.
+ */
+export interface ResolveGolemLayerReflectAction {
+  type: 'RESOLVE_GOLEM_LAYER_REFLECT';
+  monsterId: string;
+  furyBaseline: number;
+}
+
 export interface ExecuteLastWordsAction {
   type: 'EXECUTE_LAST_WORDS';
   monsterId: string;
@@ -2161,6 +2181,7 @@ export type GameAction =
   // Death / battle end
   | MonsterDefeatedAction
   | DecrementFuryAction
+  | ResolveGolemLayerReflectAction
   | ExecuteLastWordsAction
   | ApplyShieldReflectAction
   | ApplyDragonBreathRetaliationAction

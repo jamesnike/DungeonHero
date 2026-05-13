@@ -18,7 +18,7 @@
  * the preview row but never made it to the graveyard.
  *
  * The same hole affected:
- *   - DISCARD_ALL_HAND (诅咒骰局 destroyAllAmuletsAndDiscardHand)
+ *   - DISCARD_ALL_HAND (诅咒骰局 destroyRandomAmuletAndDiscardHand)
  *   - DISPOSE_EQUIPMENT_CARD (贪婪 boss destroyAllEquipment)
  *   - REMOVE_PREVIEW_CARD_STACKS, ADD_CARD_TO_HAND (other waterfall enqueues)
  *
@@ -35,7 +35,7 @@
  * `phase: 'playerInput'` (the real in-game state):
  *   1. boostRowMonsterAttack (血咒仪式 — the actually reported card)
  *   2. no-waterfallEffect (the default `else` branch — same enqueue path)
- *   3. destroyAllAmuletsAndDiscardHand (诅咒骰局 — DISCARD_ALL_HAND path)
+ *   3. destroyRandomAmuletAndDiscardHand (诅咒骰局 — DISCARD_ALL_HAND path)
  *   4. destroyAllEquipment (贪婪 boss — DISPOSE_EQUIPMENT_CARD path)
  */
 
@@ -93,7 +93,7 @@ describe('Waterfall-discarded card lands in graveyard under phase=playerInput', 
     ).toBe(false);
   });
 
-  it('诅咒骰局 (destroyAllAmuletsAndDiscardHand) — Perm 进回收袋；非 Perm 进坟场', () => {
+  it('诅咒骰局 (destroyRandomAmuletAndDiscardHand) — Perm 进回收袋；非 Perm 进坟场', () => {
     // Reducer fans out DISCARD_ALL_HAND → N x DISCARD_OWNED_CARD. Both
     // actions need to be in the whitelist for hand cards to actually reach
     // their destinations under playerInput. DISCARD_OWNED_CARD then routes
@@ -103,7 +103,7 @@ describe('Waterfall-discarded card lands in graveyard under phase=playerInput', 
       type: 'event',
       name: '诅咒骰局',
       value: 0,
-      waterfallEffect: { type: 'destroyAllAmuletsAndDiscardHand', amount: 0 },
+      waterfallEffect: { type: 'destroyRandomAmuletAndDiscardHand', amount: 0 },
     } as GameCardData;
 
     const handPotionPlain: GameCardData = {

@@ -368,10 +368,12 @@ describe('postProcessAmuletAura — automatic aura ↔ amulet sync', () => {
       expect(state.slotTempAttack.equipmentSlot2).toBe(4);
     });
 
-    it('destroyAllAmuletsAndDiscardHand waterfall discard effect reverses strength aura exactly once', () => {
-      // Simulates the discardCard waterfall effect that destroys all amulets
-      // (a card with `waterfallEffect: { type: 'destroyAllAmuletsAndDiscardHand' }`
+    it('destroyRandomAmuletAndDiscardHand waterfall discard effect reverses strength aura exactly once', () => {
+      // Simulates the discardCard waterfall effect that destroys 1 random amulet
+      // (a card with `waterfallEffect: { type: 'destroyRandomAmuletAndDiscardHand' }`
       // gets pushed off the bottom of the dungeon during waterfall planning).
+      // With only 1 amulet equipped, that single amulet is the random pick →
+      // its aura must be reversed exactly once.
       // Pipeline runs APPLY_WATERFALL_DISCARD_EFFECTS first, then
       // WATERFALL_TURN_RESET + APPLY_WATERFALL_EFFECTS.
       const discardCard: any = {
@@ -379,7 +381,7 @@ describe('postProcessAmuletAura — automatic aura ↔ amulet sync', () => {
         type: 'monster',
         name: '护符破坏者',
         value: 1,
-        waterfallEffect: { type: 'destroyAllAmuletsAndDiscardHand', amount: 0 },
+        waterfallEffect: { type: 'destroyRandomAmuletAndDiscardHand', amount: 0 },
       };
       let state = makeState({
         amuletSlots: [strengthAmulet] as any,
@@ -410,13 +412,13 @@ describe('postProcessAmuletAura — automatic aura ↔ amulet sync', () => {
       expect(state.slotTempAttack.equipmentSlot2).toBe(0);
     });
 
-    it('destroyAllAmuletsAndDiscardHand waterfall discard effect reverses balance aura exactly once', () => {
+    it('destroyRandomAmuletAndDiscardHand waterfall discard effect reverses balance aura exactly once', () => {
       const discardCard: any = {
         id: 'discard-1',
         type: 'monster',
         name: '护符破坏者',
         value: 1,
-        waterfallEffect: { type: 'destroyAllAmuletsAndDiscardHand', amount: 0 },
+        waterfallEffect: { type: 'destroyRandomAmuletAndDiscardHand', amount: 0 },
       };
       let state = makeState({
         amuletSlots: [balanceAmulet] as any,

@@ -543,6 +543,26 @@ export function isDamageMagic(card: GameCardData): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// isGoldGrantMagic — magic cards whose primary payoff is "+N gold" and which
+// can be amplified (each amplify stack = +1 to the gold amount). Used as a
+// secondary filter alongside `isDamageMagic` at the 6 amplify-target eligibility
+// sites (AmplifyModal / amplify-card resolver / 增幅秘药 wide-scope filter /
+// useEventSystem amplify-altar 3 sites).
+//
+// 赌徒之计 (gambler-gambit, starter perm) — golds [1,2,4] by level; +amp added.
+// 运势博弈 (deck-top-swap-gold, starter perm) — same-category bonus [10,15] by
+//   level; +amp added ONLY on the success branch (the -1 penalty is unchanged).
+// 血金术 (guild-blood-gold, event token perm) — fixed +3 gold; +amp added.
+// ---------------------------------------------------------------------------
+
+export function isGoldGrantMagic(card: GameCardData): boolean {
+  if (card.type !== 'magic') return false;
+  if (card.name === '赌徒之计' || card.name === '运势博弈' || card.name === '血金术') return true;
+  if (card.magicEffect === 'guild-blood-gold') return true;
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // computeDamageMagicDisplayPure — UI 用：动态展示伤害 magic 卡牌当下的 base + amplifyBonus
 //
 // 仅作 raw_base_plus_amplify：不含 spellDamageBonus / 法术回响 / 等其他增益。
@@ -715,6 +735,42 @@ export function computeDamageMagicDisplayPure(
   if (card.name === '点金裁决') {
     const dmg = state.gold + amp;
     return { mode: 'replace', text: `对任意怪物造成 ${dmg} 点伤害，并恢复等量生命。`, amplifyBonus: amp };
+  }
+
+  // ---------- Group E：金币增益类（可增幅，每层 +1 金币） ----------
+  // 跟 `isGoldGrantMagic` 严格对齐，避免一边能选作 amplify 目标、另一边显示不更新。
+
+  if (card.name === '赌徒之计') {
+    const golds = [1, 2, 4];
+    const lvl = card.upgradeLevel ?? 0;
+    const baseGold = golds[lvl] ?? 1;
+    const goldAmt = baseGold + amp;
+    return {
+      mode: 'replace',
+      text: `失去 1 点生命，获得 ${goldAmt} 金币，从背包抽 1 张牌。`,
+      amplifyBonus: amp,
+    };
+  }
+
+  if (card.name === '运势博弈') {
+    const sameCategoryBonuses = [10, 15];
+    const lvl = card.upgradeLevel ?? 0;
+    const baseBonus = sameCategoryBonuses[lvl] ?? sameCategoryBonuses[sameCategoryBonuses.length - 1];
+    const sameCatBonus = baseBonus + amp;
+    return {
+      mode: 'replace',
+      text: `与牌堆顶交换一张当前行卡牌；同类型奖励 +${sameCatBonus} 金币，否则 -1 金币。然后抽 1 张牌。`,
+      amplifyBonus: amp,
+    };
+  }
+
+  if (card.magicEffect === 'guild-blood-gold' || card.name === '血金术') {
+    const goldAmt = 3 + amp;
+    return {
+      mode: 'replace',
+      text: `永久魔法：受到 1 点伤害，获得 ${goldAmt} 金币。`,
+      amplifyBonus: amp,
+    };
   }
 
   if (card.knightEffect === 'missing-hp-smite') {

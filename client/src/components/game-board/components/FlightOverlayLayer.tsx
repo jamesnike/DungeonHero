@@ -24,7 +24,12 @@ const DISCARD_SHOCK_PROJECTILE_SIZE = 56;
 const DIRECTED_REFLECT_PROJECTILE_SIZE = 50;
 const DIRECTED_RETALIATION_PROJECTILE_SIZE = 52;
 const DIRECTED_ARCANE_PROJECTILE_SIZE = 44;
-const DIRECTED_GOLEM_LAYER_PROJECTILE_SIZE = 48;
+// Golem 反震 shockwave: rendered as an EXPANDING RING centered on Golem cell
+// (no projectile travel). Base size is the at-rest ring diameter; the
+// per-flight `ringScale` (typically ~3.4–4.0) inflates it to the peak so the
+// wave visibly engulfs adjacent cells. Distinct from the old projectile
+// (which used to fly Golem→Hero) — see useDirectedCombatFx.ts for animation.
+const DIRECTED_GOLEM_SHOCKWAVE_BASE_SIZE = 96;
 const DIRECTED_DRAGON_BREATH_PROJECTILE_SIZE = 50;
 const DIRECTED_MISSILE_STORM_PROJECTILE_SIZE = 38;
 
@@ -238,8 +243,8 @@ function FlightOverlayLayerInner({
                 ? DIRECTED_REFLECT_PROJECTILE_SIZE
                 : flight.kind === 'arcane-blade-spell'
                   ? DIRECTED_ARCANE_PROJECTILE_SIZE
-                  : flight.kind === 'golem-layer-reflect'
-                    ? DIRECTED_GOLEM_LAYER_PROJECTILE_SIZE
+                  : flight.kind === 'golem-shockwave'
+                    ? DIRECTED_GOLEM_SHOCKWAVE_BASE_SIZE
                     : flight.kind === 'dragon-breath'
                       ? DIRECTED_DRAGON_BREATH_PROJECTILE_SIZE
                       : flight.kind === 'missile-storm'
@@ -247,9 +252,13 @@ function FlightOverlayLayerInner({
                         : DIRECTED_RETALIATION_PROJECTILE_SIZE;
             const isReflect = flight.kind === 'shield-reflect';
             const isArcane = flight.kind === 'arcane-blade-spell';
-            const isGolemLayer = flight.kind === 'golem-layer-reflect';
+            const isGolemShockwave = flight.kind === 'golem-shockwave';
             const isDragonBreath = flight.kind === 'dragon-breath';
             const isMissileStorm = flight.kind === 'missile-storm';
+            // Golem shockwave is rendered as a HOLLOW expanding ring — thick
+            // amber/stone border, transparent center, multiple drop-shadows
+            // for a "stone slamming outward" feel. Distinct from every other
+            // directed FX (which are filled circular projectiles).
             return (
               <div
                 key={flight.id}
@@ -258,12 +267,12 @@ function FlightOverlayLayerInner({
                   else directedCombatFxElementMapRef.current.delete(flight.id);
                 }}
                 className={
-                  isMissileStorm
-                    ? 'absolute rounded-full border-2 border-sky-300/95 bg-gradient-to-br from-cyan-200/95 via-sky-400/90 to-indigo-600/95 shadow-[0_0_18px_rgba(56,189,248,0.95)] ring-2 ring-cyan-100/55'
-                    : isDragonBreath
-                      ? 'absolute rounded-full border-2 border-orange-500/95 bg-gradient-to-br from-yellow-300/95 via-orange-500/90 to-red-700/95 shadow-[0_0_22px_rgba(249,115,22,0.95)] ring-2 ring-yellow-200/50'
-                      : isGolemLayer
-                        ? 'absolute rounded-full border-2 border-stone-500/95 bg-gradient-to-br from-stone-300/95 via-amber-700/90 to-stone-800/95 shadow-[0_0_20px_rgba(120,83,50,0.9)] ring-2 ring-amber-300/50'
+                  isGolemShockwave
+                    ? 'absolute rounded-full border-[6px] border-amber-400/90 bg-transparent shadow-[0_0_36px_12px_rgba(251,191,36,0.55),inset_0_0_28px_8px_rgba(120,83,50,0.65)] ring-4 ring-stone-300/40'
+                    : isMissileStorm
+                      ? 'absolute rounded-full border-2 border-sky-300/95 bg-gradient-to-br from-cyan-200/95 via-sky-400/90 to-indigo-600/95 shadow-[0_0_18px_rgba(56,189,248,0.95)] ring-2 ring-cyan-100/55'
+                      : isDragonBreath
+                        ? 'absolute rounded-full border-2 border-orange-500/95 bg-gradient-to-br from-yellow-300/95 via-orange-500/90 to-red-700/95 shadow-[0_0_22px_rgba(249,115,22,0.95)] ring-2 ring-yellow-200/50'
                         : isArcane
                           ? 'absolute rounded-full border-2 border-purple-400/95 bg-gradient-to-br from-violet-300/95 via-purple-500/90 to-indigo-700/90 shadow-[0_0_20px_rgba(139,92,246,0.95)] ring-2 ring-purple-200/50'
                           : isReflect

@@ -423,15 +423,15 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
 
   const handleShopEquipAttackRequest = useCallback(() => {
     depsRef.current.pushUndoSnapshot();
-    if (shopEquipAttackUsed || engine.getState().gold < SHOP_EQUIP_BOOST_COST) return;
+    if (engine.getState().gold < SHOP_EQUIP_BOOST_COST) return;
     dispatch({ type: 'SHOP_EQUIP_BOOST', boostType: 'attack' });
-  }, [engine, shopEquipAttackUsed, dispatch]);
+  }, [engine, dispatch]);
 
   const handleShopEquipArmorRequest = useCallback(() => {
     depsRef.current.pushUndoSnapshot();
-    if (shopEquipArmorUsed || engine.getState().gold < SHOP_EQUIP_BOOST_COST) return;
+    if (engine.getState().gold < SHOP_EQUIP_BOOST_COST) return;
     dispatch({ type: 'SHOP_EQUIP_BOOST', boostType: 'armor' });
-  }, [engine, shopEquipArmorUsed, dispatch]);
+  }, [engine, dispatch]);
 
   const handleShopRefreshRequest = useCallback(() => {
     depsRef.current.pushUndoSnapshot();

@@ -20,7 +20,7 @@ import { drawMultipleFromBackpack } from '../cards';
 import { nextInt, shuffle as rngShuffle } from '../rng';
 import { formatRepairTargetLabel } from '../helpers';
 import { hasEternalRelic, getEternalRelic, countEternalRelics } from '@/lib/eternalRelics';
-import { isDamageMagic } from '../helpers';
+import { isDamageMagic, isGoldGrantMagic } from '../helpers';
 
 // ---------------------------------------------------------------------------
 // Logging helpers
@@ -591,14 +591,14 @@ function executeAmplifyTargetWide(ctx: ExecutionContext, _effect: CardEffect): v
   const hasEquip1 = eligibleEquip('equipmentSlot1');
   const hasEquip2 = eligibleEquip('equipmentSlot2');
   const eligibleHand = ctx.state.handCards.filter(
-    c => c.id !== ctx.card.id && (c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c)),
+    c => c.id !== ctx.card.id && (c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c) || isGoldGrantMagic(c)),
   );
   const eligibleBackpack = ctx.state.backpackItems.filter(
-    c => c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c),
+    c => c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c) || isGoldGrantMagic(c),
   );
 
   if (!hasEquip1 && !hasEquip2 && eligibleHand.length === 0 && eligibleBackpack.length === 0) {
-    log(ctx, 'potion', '增幅秘药：没有可增幅的目标（装备栏 / 手牌 / 背包均无装备或伤害魔法）。');
+    log(ctx, 'potion', '增幅秘药：没有可增幅的目标（装备栏 / 手牌 / 背包均无装备 / 伤害魔法 / 金币魔法）。');
     banner(ctx, '增幅秘药：没有可增幅的目标。');
     return;
   }

@@ -139,6 +139,8 @@ export function reduceCombatActions(state: GameState, action: GameAction): Reduc
       return reduceMonsterDefeated(state, action);
     case 'DECREMENT_FURY':
       return reduceDecrementFury(state, action);
+    case 'RESOLVE_GOLEM_LAYER_REFLECT':
+      return reduceResolveGolemLayerReflect(state, action);
     case 'EXECUTE_LAST_WORDS':
       return reduceExecuteLastWords(state, action);
     case 'APPLY_SHIELD_REFLECT':
@@ -1571,35 +1573,75 @@ function reduceDecrementFury(
     });
   }
 
-  // Golem layer-loss reflect — also fires when the monster spends a layer to
-  // attack (DECREMENT_FURY), mirroring the DEAL_DAMAGE_TO_MONSTER branch.
-  let reflectPatch: Partial<GameState> = {};
-  if (monster.golemLayerLossReflect && monster.golemLayerLossReflect > 0
-    && nextLayer < currentLayer && !monster.isStunned) {
-    const totalLostLayers = (monster.fury ?? monster.hpLayers ?? 1) - nextLayer;
-    const reflectDmg = monster.golemLayerLossReflect * totalLostLayers;
-    const reflectLabel = `反震（${monster.golemLayerLossReflect}×${totalLostLayers} 已损失血层）`;
-    const route = routeReflectDamageToHero(state, reflectDmg, monster.name, reflectLabel, rng);
-    reflectPatch = route.patch;
-    rng = route.rng;
-    sideEffects.push({
-      event: 'combat:golemReflect',
-      payload: {
-        monsterId: action.monsterId,
-        monsterName: monster.name,
-        damage: reflectDmg,
-        hitSlotId: route.hitSlotId,
-      },
-    });
-    sideEffects.push(...route.sideEffects);
-    enqueuedActions.push(...route.enqueuedActions);
-  }
+  // NOTE: Golem layer-loss reflect (反震) USED to fire inline here. As of the
+  // 2026 "settle separately, settle last" refactor, the reflect is enqueued
+  // by `reduceResolveBlock` as a dedicated `RESOLVE_GOLEM_LAYER_REFLECT`
+  // action that runs AFTER both DECREMENT_FURY and the shield-reflect
+  // (DEAL_DAMAGE_TO_MONSTER) have applied. This guarantees the reflect routes
+  // against the LATEST state — broken shield slots are already null, so the
+  // reflect never "phantom-hits" a slot that was destroyed earlier in the
+  // same round. See `golem-layer-reflect-after-shield-break.test.ts`.
 
   return applyPatch(
     state,
-    { ...reflectPatch, activeCards: activeCards as GameState['activeCards'], rng },
+    { activeCards: activeCards as GameState['activeCards'], rng },
     sideEffects,
     enqueuedActions,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_GOLEM_LAYER_REFLECT
+//
+// Settles Golem's layer-loss reflect (反震) as a SEPARATE, deferred action.
+// Enqueued from `reduceResolveBlock` AFTER the shield-break routing AND
+// after the shield's reflect-to-Golem damage has resolved. This guarantees
+// the reflect reads the latest state (broken shields gone, Golem hp/layer
+// post-shield-reflect) so it cannot "phantom-hit" a destroyed slot.
+//
+// `furyBaseline` is captured at attack time (Golem's `fury` / `hpLayers`).
+// We compute the actual lost layers by reading the monster's CURRENT layer
+// count — if Golem died from shield reflect (or otherwise dropped to 0
+// layers), the reducer is a no-op (no reflect from a dead golem).
+// ---------------------------------------------------------------------------
+
+function reduceResolveGolemLayerReflect(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_GOLEM_LAYER_REFLECT' }>,
+): ReduceResult {
+  const monster = state.activeCards.find(c => c?.id === action.monsterId);
+  if (!monster) return noChange(state);
+  if (monster.isStunned) return noChange(state);
+  if (!monster.golemLayerLossReflect || monster.golemLayerLossReflect <= 0) return noChange(state);
+
+  const currentLayer = monster.currentLayer ?? monster.hpLayers ?? monster.fury ?? 1;
+  // If the monster died (currentLayer <= 0) or somehow regenerated above the
+  // baseline, skip — the reflect only fires when at least one layer was lost.
+  if (currentLayer <= 0) return noChange(state);
+  const totalLostLayers = action.furyBaseline - currentLayer;
+  if (totalLostLayers <= 0) return noChange(state);
+
+  const reflectDmg = monster.golemLayerLossReflect * totalLostLayers;
+  const reflectLabel = `反震（${monster.golemLayerLossReflect}×${totalLostLayers} 已损失血层）`;
+  const route = routeReflectDamageToHero(state, reflectDmg, monster.name, reflectLabel);
+
+  const sideEffects: SideEffect[] = [];
+  sideEffects.push({
+    event: 'combat:golemReflect',
+    payload: {
+      monsterId: action.monsterId,
+      monsterName: monster.name,
+      damage: reflectDmg,
+      hitSlotId: route.hitSlotId,
+    },
+  });
+  sideEffects.push(...route.sideEffects);
+
+  return applyPatch(
+    state,
+    { ...route.patch, rng: route.rng },
+    sideEffects,
+    route.enqueuedActions,
   );
 }
 
@@ -2084,7 +2126,7 @@ export function routeReflectDamageToHero(
 
   const shieldDurability = item.durability ?? 1;
   if (shieldDurability <= 1) {
-    const breakResult = computeEquipmentBreakEffects(state, slotId, item, ae);
+    const breakResult = computeEquipmentBreakEffects(state, slotId, item, ae, { ...patch, rng });
     Object.assign(patch, breakResult.patch);
     rng = breakResult.rng;
     sideEffects.push(...breakResult.sideEffects);
@@ -2341,7 +2383,7 @@ function reducePerformShieldBash(
   // Durability loss
   const weaponDurability = slotItem.durability ?? 1;
   if (weaponDurability <= 1) {
-    const breakResult = computeEquipmentBreakEffects(state, slotId, slotItem, ae);
+    const breakResult = computeEquipmentBreakEffects(state, slotId, slotItem, ae, { ...patch, rng });
     Object.assign(patch, breakResult.patch);
     rng = breakResult.rng;
     sideEffects.push(...breakResult.sideEffects);
@@ -3085,7 +3127,13 @@ function reducePerformHeroAttack(
       const weaponDurability = slotItem.durability ?? 1;
       if (weaponDurability <= 1 && !state.unbreakableNext) {
         weaponDestroyed = true;
-        const breakResult = computeEquipmentBreakEffects(state, slotId, slotItem as GameCardData, ae);
+        // Thread current `patch` + `rng` into break so any earlier writes from
+        // this same attack (e.g. `overkillRecycleToHand` adding cards to
+        // `patch.handCards`, `overkillBackpackRecycle` writing
+        // `patch.permanentMagicRecycleBag`, `overkillLifesteal` writing `patch.hp`)
+        // are visible to salvage/last-words logic and not clobbered by
+        // `Object.assign`. See the comment on `computeEquipmentBreakEffects`.
+        const breakResult = computeEquipmentBreakEffects(state, slotId, slotItem as GameCardData, ae, { ...patch, rng });
         Object.assign(patch, breakResult.patch);
         rng = breakResult.rng;
         sideEffects.push(...breakResult.sideEffects);
@@ -3992,7 +4040,7 @@ function reduceResolveBlock(
           const shieldDurability = slotItem.durability ?? 1;
           if (shieldDurability <= 1 && !state.unbreakableNext) {
             shieldDurabilityConsumed = true;
-            const breakResult = computeEquipmentBreakEffects(state, blockSlotId, slotItem as GameCardData, ae);
+            const breakResult = computeEquipmentBreakEffects(state, blockSlotId, slotItem as GameCardData, ae, { ...patch, rng });
             Object.assign(patch, breakResult.patch);
             rng = breakResult.rng;
             sideEffects.push(...breakResult.sideEffects);
@@ -4118,7 +4166,7 @@ function reduceResolveBlock(
       });
       const corrodedDur = (corrodeItem.durability ?? 1) - 1;
       if (corrodedDur <= 0) {
-        const breakResult = computeEquipmentBreakEffects(state, corrodeSlotId, corrodeItem as GameCardData, ae);
+        const breakResult = computeEquipmentBreakEffects(state, corrodeSlotId, corrodeItem as GameCardData, ae, { ...patch, rng });
         Object.assign(patch, breakResult.patch);
         rng = breakResult.rng;
         sideEffects.push(...breakResult.sideEffects);
@@ -4316,6 +4364,26 @@ function reduceResolveBlock(
       enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: reflectDmg, source: 'shield-reflect' });
     }
     if (overclockExtraBlock > 0) overclockFiredThisBlock = true;
+  }
+
+  // Golem 反震 (layer-loss reflect) — settle SEPARATELY and LAST.
+  // Enqueued AFTER both DECREMENT_FURY (so we can read the post-decrement
+  // layer count) AND DEAL_DAMAGE_TO_MONSTER shield-reflect (so Golem hp /
+  // potential death from thorn-shield is reflected in state). The dedicated
+  // reducer (reduceResolveGolemLayerReflect) re-reads state and routes
+  // reflect — broken shields are already null at that point, so the reflect
+  // never "phantom-hits" a slot destroyed earlier in the same round.
+  // (Earlier inline impl in reduceDecrementFury was vulnerable to the user-
+  // reported "reflect hits broken shield" bug because reflect ran BEFORE
+  // shield-reflect was applied to Golem's hp. See
+  // `golem-layer-reflect-after-shield-break.test.ts`.)
+  if (monster.golemLayerLossReflect && monster.golemLayerLossReflect > 0 && !monster.isStunned) {
+    const furyBaseline = monster.fury ?? monster.hpLayers ?? 1;
+    enqueuedActions.push({
+      type: 'RESOLVE_GOLEM_LAYER_REFLECT',
+      monsterId: monster.id,
+      furyBaseline,
+    });
   }
 
   // Ogre stun

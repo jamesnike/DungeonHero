@@ -28,6 +28,7 @@ import {
   logBackpackDraw,
   pickRandomHandCardsForDiscardPreferGraveyard,
   isDamageMagic,
+  isGoldGrantMagic,
 } from '@/game-core/helpers';
 import { cloneClassCardWithFreshId } from '@/game-core/cardClone';
 import { isReducerHandledEventToken } from '@/game-core/events';
@@ -2107,7 +2108,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         : ac.findIndex(c => c?.id === eventCardSnapshot?.id);
 
       const eligibleFilter = (c: GameCardData) =>
-        c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c);
+        c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c) || isGoldGrantMagic(c);
       const eligible = engine.getState().handCards.filter(eligibleFilter);
 
       const applyAmplifyHandTarget = (targetCard: GameCardData) => {
@@ -2272,7 +2273,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         : ac.findIndex(c => c?.id === eventCardSnapshot?.id);
 
       const eligibleFilter = (c: GameCardData) =>
-        c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c);
+        c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c) || isGoldGrantMagic(c);
 
       const backpackIdsBefore = new Set(engine.getState().backpackItems.map(c => c.id));
       const graveyardIdsBefore = new Set(engine.getState().discardedCards.map(c => c.id));
@@ -2349,7 +2350,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         : ac.findIndex(c => c?.id === eventCardSnapshot?.id);
 
       const eligibleFilter = (c: GameCardData) =>
-        c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c);
+        c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c) || isGoldGrantMagic(c);
 
       depsRef.current.requestGraveyardSelection(3, {
         delivery: 'hand-first',

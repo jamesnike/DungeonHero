@@ -18,6 +18,29 @@ export type { OnEnterHandHandler } from './on-enter-hand';
 export { computeCardText, applyDerivedCardText, registerCardText, registerCardTextAll, resolveCardTextId, getCardTextRegistrySize } from './card-text';
 export type { CardText, CardTextFormatter } from './card-text';
 
+// Equipment-derived effect registry (PR-1: infrastructure only; per-surface
+// handlers are added in PR-2 ~ PR-5).
+export {
+  runEquipmentDerivedHandlers,
+  registerEquipmentDerivedHandler,
+  registerEquipmentDerivedHandlers,
+  getEquipmentDerivedRegistrySize,
+  getRegisteredEquipmentDerivedHandlerIds,
+  __clearEquipmentDerivedHandlers,
+} from './equipment-derived';
+export type {
+  EquipmentDerivedSurface,
+  EquipmentDerivedHandler,
+  EquipmentDerivedCtx,
+  HandlerResult,
+  RunResult,
+  AttackCtx,
+  BlockCtx,
+  ShieldReflectCtx,
+  DurabilityLossCtx,
+  SurfaceCtxMap,
+} from './equipment-derived';
+
 // Import definitions to trigger auto-registration
 import './definitions/potions';
 import './definitions/magic';

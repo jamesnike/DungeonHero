@@ -66,7 +66,7 @@ alwaysApply: true
 ### Pattern A：`removeAllAmulets` style（**不**触发 onDiscard 联动）
 
 参考 `client/src/game-core/events.ts` `removeAllAmulets` (~L1112) /
-`waterfall.ts` `destroyAllAmuletsAndDiscardHand` (~L721)：
+`waterfall.ts` `destroyRandomAmuletAndDiscardHand` (~L1006)：
 
 ```ts
 const permCards: GameCardData[] = [];

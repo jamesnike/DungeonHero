@@ -293,8 +293,7 @@ export function shopEquipBoostPure(
   state: GameState,
   boostType: 'attack' | 'armor',
 ): Partial<GameState> | null {
-  const usedFlag = boostType === 'attack' ? 'shopEquipAttackUsed' : 'shopEquipArmorUsed';
-  if (state[usedFlag] || state.gold < SHOP_EQUIP_BOOST_COST) return null;
+  if (state.gold < SHOP_EQUIP_BOOST_COST) return null;
 
   const bonusKey: keyof EquipmentSlotBonusState['equipmentSlot1'] =
     boostType === 'attack' ? 'damage' : 'shield';
@@ -312,12 +311,22 @@ export function shopEquipBoostPure(
 
   const label = boostType === 'attack' ? '攻击' : '护甲';
 
-  return {
+  const patch: Partial<GameState> = {
     gold: state.gold - SHOP_EQUIP_BOOST_COST,
     equipmentSlotBonuses: newBonuses,
-    [usedFlag]: true,
     heroSkillBanner: `花费 ${SHOP_EQUIP_BOOST_COST} 金币，所有装备栏永久${label} +1！`,
   };
+
+  // Per shield-armor-vs-durability rule: any modification to
+  // equipmentSlotBonuses[slotId].shield must immediately refill the slot's
+  // armor to the new cap, otherwise stacked purchases would only raise the
+  // cap without raising current armor (player sees "+1 added but didn't help").
+  if (boostType === 'armor') {
+    applySlotArmorBonusDelta(state, 'equipmentSlot1', 1, patch);
+    applySlotArmorBonusDelta(state, 'equipmentSlot2', 1, patch);
+  }
+
+  return patch;
 }
 
 // ---------------------------------------------------------------------------

@@ -3268,9 +3268,13 @@ function reduceDungeonCardSelection(
 
       const sameCategory = getCardPlayCategory(card) === getCardPlayCategory(ragedDeckTop);
       // 同类型奖励：L0 +10，L1 +15。不同类型固定 -1，不随升级变化。
+      // 增幅：每层 +1 金币，**仅作用于「同类型奖励」分支**——「不同类型」-1 是惩罚，
+      // 不算「可获得的金币」，按设计保持不变（与 isGoldGrantMagic /
+      // computeDamageMagicDisplayPure 同口径）。
       const dtsgUpgLvl = pending.card.upgradeLevel ?? 0;
       const sameCategoryBonuses = [10, 15];
-      const sameCategoryBonus = sameCategoryBonuses[dtsgUpgLvl] ?? 15;
+      const dtsgAmp = pending.card.amplifyBonus ?? 0;
+      const sameCategoryBonus = (sameCategoryBonuses[dtsgUpgLvl] ?? 15) + dtsgAmp;
       const goldDelta = sameCategory ? sameCategoryBonus : -1;
       enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldDelta, source: 'deck-top-swap-gold' });
       // 「抽 1 张牌」每次成功结算都触发；echo 通过 maybeRepromptEcho 多轮迭代，

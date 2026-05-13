@@ -890,19 +890,37 @@ export function computeEquipmentDisplacementLastWords(
 // Equipment break (durability reaches 0) — "last words" / revive / destroy
 // ---------------------------------------------------------------------------
 
+// IMPORTANT: `initialPatch` is required for any caller that has already written
+// to `patch.handCards` / `patch.backpackItems` / `patch.permanentMagicRecycleBag` /
+// `patch.discardedCards` / `patch.gold` / etc. BEFORE invoking this function in
+// the same reduce step. Without it, the local `patch` starts empty and any field
+// this function writes (salvage adds to hand, `graveyard-to-hand` last-words adds
+// to hand, `lastWordsGainBolt` adds to hand/backpack/recycleBag, `routeBrokenSelfToGraveOrRecycle`
+// adds to grave, `onDestroyGold` writes gold, etc.) will OVERWRITE the caller's
+// prior writes when `Object.assign(outerPatch, breakResult.patch)` runs.
+//
+// Concrete bug this used to cause (now fixed): 噬魂猎刃 + 残骸回收符 + 同次攻击
+// 武器破，超杀触发 `overkillRecycleToHand` 写了 `patch.handCards` 把 2 张回收
+// 袋牌移到手；然后耐久 tick 调本函数，break 内部从空 patch 出发，salvage 写
+// `patch.handCards = [...state.handCards, salvaged]`（没看到那 2 张超杀牌），
+// 外层 `Object.assign` 覆盖回 `[salvaged]` —— 2 张超杀牌人间蒸发。
+// 类似 bug 也存在于 PERFORM_SHIELD_BASH 的 `stunRecycleToHand` + 残骸回收符
+// + 盾击同次破 组合。Mirrors `computeEquipmentDisplacementLastWords` which
+// already accepts an `initialPatch`.
 export function computeEquipmentBreakEffects(
   state: GameState,
   slotId: EquipmentSlotId,
   slotItem: GameCardData,
   amuletEffects: ActiveAmuletEffects,
+  initialPatch: Partial<GameState> = {},
 ): EquipmentBreakResult {
   const isMonsterEquip = slotItem.type === 'monster';
   const otherSlotId = otherSlot(slotId);
   const otherItem = getSlotItem(state, otherSlotId);
   const effects: SideEffect[] = [];
   const enqueuedActions: GameAction[] = [];
-  const patch: Partial<GameState> = {};
-  let rng = state.rng;
+  const patch: Partial<GameState> = { ...initialPatch };
+  let rng = (initialPatch.rng ?? state.rng) as RngState;
   let drawFromBackpack = 0;
   let classCardDraw = 0;
 
@@ -1093,6 +1111,12 @@ export function computeEquipmentBreakEffects(
       effects.push({ event: 'ui:banner', payload: { text: `${otherForReRevive.name} 轮回！` } });
     }
   }
+
+  // Mirror `computeEquipmentDisplacementLastWords`: thread the final rng back
+  // into the returned patch so `Object.assign(outerPatch, breakResult.patch)`
+  // picks up any internal rolls (wraith swap, salvage RNG via downstream paths).
+  // Callers that read `breakResult.rng` separately keep working.
+  patch.rng = rng;
 
   return { patch, sideEffects: effects, enqueuedActions, drawFromBackpack, classCardDraw, revived, destroyed, wraithSwapTarget, rng };
 }

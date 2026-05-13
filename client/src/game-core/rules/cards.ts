@@ -2568,7 +2568,7 @@ function reduceResolveAmplify(
     image: skillScrollImage,
     magicType: 'permanent',
     magicEffect: 'amplify-target',
-    description: `永久魔法（Perm 1）：对「${targetName}」进行增幅（武器攻击+1，护盾护甲+1，怪物攻击+1 生命+1，伤害魔法伤害+1）。`,
+    description: `永久魔法（Perm 1）：对「${targetName}」进行增幅（武器攻击+1，护盾护甲+1，怪物攻击+1 生命+1，伤害魔法伤害+1，金币魔法+1金币）。`,
     recycleDelay: 1,
     _amplifyTargetCardId: targetCardId,
     _amplifyTargetName: targetName,

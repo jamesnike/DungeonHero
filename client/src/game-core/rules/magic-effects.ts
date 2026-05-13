@@ -98,9 +98,9 @@
  * │ STARTER undying-blessing         │ B   │ pick slot twice               │
  * │ STARTER magic-missile            │ A   │ bolt count ×N                 │
  * │ STARTER stun-strike              │ A/B │ dmg ×N + modal re-prompt      │
- * │ STARTER gambler-gambit           │ A   │ gold/draw ×N                  │
  * │ STARTER recycle-draw-magic       │ C   │ second pass = no-op           │
- * │ STARTER guild-blood-gold         │ A   │ dmg/gold ×N                   │
+ * │ STARTER gambler-gambit           │ —   │ moved to schema (deleted)     │
+ * │ STARTER guild-blood-gold         │ —   │ moved to schema (deleted)     │
  * │ STARTER transform-streak-strike  │ A/B │ dmg ×N + modal re-prompt      │
  * │ STARTER flank-slot-temp-attack   │ A   │ +atk ×N                       │
  * │ STARTER deck-top-swap-gold       │ A/B │ pick swap twice + draw ×N     │
@@ -197,6 +197,7 @@ import {
   sanitizeCardMetadata,
   getCardPlayCategory,
   isDamageMagic,
+  isGoldGrantMagic,
   pickRandomHandCardsForDiscardPreferGraveyard,
   getEligibleHandDiscardCards,
   applyAmplifyOnCreate,
@@ -1021,10 +1022,10 @@ export function resolveInstantMagic(
     const hasEquip1 = state.equipmentSlot1 && (state.equipmentSlot1.type === 'weapon' || state.equipmentSlot1.type === 'shield');
     const hasEquip2 = state.equipmentSlot2 && (state.equipmentSlot2.type === 'weapon' || state.equipmentSlot2.type === 'shield');
     const eligibleHand = state.handCards.filter(
-      c => c.id !== card.id && (c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c)),
+      c => c.id !== card.id && (c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c) || isGoldGrantMagic(c)),
     );
     if (!hasEquip1 && !hasEquip2 && eligibleHand.length === 0) {
-      banner(sideEffects, '增幅：没有可增幅的目标（装备栏无装备，手牌中无装备或伤害魔法）。');
+      banner(sideEffects, '增幅：没有可增幅的目标（装备栏无装备，手牌中无装备 / 伤害魔法 / 金币魔法）。');
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -2052,31 +2053,11 @@ export function resolvePermanentMagic(
     case STARTER_CARD_IDS.stunStrike:
       return resolveStunStrike(state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered);
 
-    case STARTER_CARD_IDS.gamblerGambit: {
-      const goldAmounts = [1, 2, 3];
-      const drawAmounts = [1, 2, 3];
-      const goldAmt = goldAmounts[card.upgradeLevel ?? 0] ?? 1;
-      const drawAmt = drawAmounts[card.upgradeLevel ?? 0] ?? 1;
-      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 1, source: 'gambler-gambit', selfInflicted: true });
-      enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldAmt, source: 'potion-gold-draw' });
-      const drawState = { ...state, ...patch } as GameState;
-      const drawResult = drawMultipleFromBackpack(drawState, drawAmt);
-      if (drawResult.cards.length > 0) {
-        mergePatch(patch, drawResult.patch);
-        for (const d of drawResult.cards) {
-          sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
-        }
-        applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
-      }
-      const drawnMsg = drawResult.cards.length > 0
-        ? `，抽到${drawResult.cards.map(c => `「${c.name}」`).join('、')}`
-        : '，背包为空';
-      log(sideEffects, 'magic', `赌徒之计：失去 1 生命，+${goldAmt} 金币${drawnMsg}`);
-      banner(sideEffects, `赌徒之计：-1 生命，+${goldAmt} 金币${drawnMsg}。`);
-      patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
-    }
+    // 赌徒之计 (gambler-gambit) — schema-only.
+    // Schema resolver: card-schema/definitions/magic.ts `starterGamblerGambit`
+    // (effectId: `starter:starter-perm-gambler-gambit`). 升级表 [1,2,4] 金币 / [1,1,1] 张牌
+    // 是权威值（跟 card-text formatter / computeDamageMagicDisplayPure 同步）。
+    // 老 legacy 的 [1,2,3]/[1,2,3] 是历史 drift，已删。
 
     case STARTER_CARD_IDS.recycleDrawMagic: {
       // 语义：从回收袋**随机**选 N 张牌（N = 1/2/3，按 upgradeLevel），
@@ -2170,15 +2151,12 @@ export function resolvePermanentMagic(
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
 
-    case 'guild-blood-gold': {
-      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 1 * echoMultiplier, source: 'guild-blood-gold', selfInflicted: true });
-      enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 3 * echoMultiplier, source: 'guild-blood-gold' });
-      log(sideEffects, 'magic', `血金术：受到 ${1 * echoMultiplier} 点伤害，获得 ${3 * echoMultiplier} 金币`);
-      banner(sideEffects, `血金术：以 ${1 * echoMultiplier} 点生命换取 ${3 * echoMultiplier} 金币。${echoTag}`);
-      patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
-    }
+    // 血金术 (guild-blood-gold) — schema-only.
+    // Schema resolver: card-schema/definitions/magic.ts `starterGuildBloodGold`
+    // 注册在 effectId `card:血金术`（**不是** `starter:guild-blood-gold`），原因
+    // 见那段 def 的注释：events.ts 老存档的 magicEffect 是描述串，必须靠 fallback
+    // 链 `card:${name}` 兜底。新卡（events.ts 已经不写 magicEffect）也通过同一条
+    // fallback 命中。
   }
 
   // --- Card name based routing for permanent cards ---
@@ -2758,7 +2736,10 @@ export function executeArmorDoubleStrike(
   const curDur = slotItem.durability ?? 1;
   if (curDur <= 1) {
     const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
-    const breakResult = computeEquipmentBreakEffects(state, slotId, slotItem, ae);
+    // Thread current `patch` into break so any earlier writes in this reducer
+    // (e.g. `patch.handCards` / `patch.permanentMagicRecycleBag` / `patch.gold`)
+    // are visible to salvage / last-words logic. See comment on the function.
+    const breakResult = computeEquipmentBreakEffects(state, slotId, slotItem, ae, patch);
     Object.assign(patch, breakResult.patch);
     sideEffects.push(...breakResult.sideEffects);
     enqueuedActions.push(...breakResult.enqueuedActions);
