@@ -178,6 +178,26 @@ export interface EquipmentDerivedCtx<S extends EquipmentDerivedSurface> {
    * are safe to run every iteration — that IS the multiplier.
    */
   isFirstIteration: boolean;
+
+  /**
+   * `true` on the LAST call of this handler within a runner invocation.
+   * For overclock=0: same iteration is both first AND last.
+   * For overclock=N: iteration N (0-indexed) has `isLastIteration = true`.
+   *
+   * Handlers use this to flush «final state» logs (e.g. wraith-rebirth's
+   * "all attempts failed" message that needs to know rolls are exhausted).
+   */
+  isLastIteration: boolean;
+
+  /**
+   * Total overclock extra triggers for this run (=
+   * `equipOverclockExtraTriggers(state)`). Total iterations = `1 + overclockExtra`.
+   *
+   * Handlers that need to anticipate the FINAL aggregated value on
+   * `isFirstIteration` (e.g. bleed logging "+9 (total)" rather than 3 separate
+   * "+3" lines) can multiply by `(1 + overclockExtra)`.
+   */
+  overclockExtra: number;
 }
 
 export interface HandlerResult {
@@ -187,10 +207,26 @@ export interface HandlerResult {
    *
    * If `false` on `isFirstIteration === true` → handler is skipped entirely
    * (no replay). If `false` on a later iteration → that single iteration is
-   * recorded but won't push the surface-level overclock side effect by itself
-   * (the first-iteration `fired` decides).
+   * recorded but its result is otherwise discarded.
    */
   fired: boolean;
+
+  /**
+   * Did this iteration's work actually require overclock to fire? Used to
+   * gate the `combat:equipOverclockTriggered` side effect — runner emits the
+   * overclock surface side effect iff at least one handler iteration returned
+   * `contributedToOverclock: true`.
+   *
+   * Default: `fired` itself. Most handlers (mine, bleed, golem) always
+   * contribute to overclock when overclock is active and they fired. Wraith-
+   * rebirth opts out (`false`) when its first roll succeeded with no rescue
+   * needed — original UX only emits the overclock banner when overclock
+   * actively rescued, not when overclock was idle.
+   *
+   * Note: runner additionally requires `overclockExtra > 0` before emitting
+   * the side effect (this flag is irrelevant when no overclock is active).
+   */
+  contributedToOverclock?: boolean;
 }
 
 export type EquipmentDerivedHandler<S extends EquipmentDerivedSurface> = (
@@ -321,7 +357,9 @@ export function runEquipmentDerivedHandlers<S extends EquipmentDerivedSurface>(
 ): RunResult {
   const handlers = getRegistry(surface);
   const overclockExtra = equipOverclockExtraTriggers(baseCtx.state);
+  const totalIterations = 1 + overclockExtra;
   let anyFired = false;
+  let anyContributed = false;
   let firedCount = 0;
   let rng = baseCtx.rng;
 
@@ -334,6 +372,8 @@ export function runEquipmentDerivedHandlers<S extends EquipmentDerivedSurface>(
       ...baseCtx,
       rng,
       isFirstIteration: true,
+      isLastIteration: totalIterations === 1,
+      overclockExtra,
     };
     const r1 = handler(ctxFirst);
     rng = ctxFirst.rng;
@@ -341,19 +381,27 @@ export function runEquipmentDerivedHandlers<S extends EquipmentDerivedSurface>(
 
     anyFired = true;
     firedCount += 1;
+    if ((r1.contributedToOverclock ?? r1.fired) && overclockExtra > 0) {
+      anyContributed = true;
+    }
 
     for (let i = 0; i < overclockExtra; i++) {
       const ctxN: EquipmentDerivedCtx<S> = {
         ...baseCtx,
         rng,
         isFirstIteration: false,
+        isLastIteration: i === overclockExtra - 1,
+        overclockExtra,
       };
-      handler(ctxN);
+      const rN = handler(ctxN);
       rng = ctxN.rng;
+      if ((rN.contributedToOverclock ?? rN.fired) && overclockExtra > 0) {
+        anyContributed = true;
+      }
     }
   });
 
-  if (anyFired && overclockExtra > 0) {
+  if (anyContributed) {
     baseCtx.sideEffects.push({
       event: 'combat:equipOverclockTriggered',
       payload: { surface: surfaceLabel(surface), count: overclockExtra },
