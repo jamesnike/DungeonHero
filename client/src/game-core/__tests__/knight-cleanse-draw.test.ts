@@ -15,8 +15,9 @@
  *     file covers the reducer-side state, not the hook loop itself.
  *   - Stacks with 招灵书印 (`amuletEffect: 'delete-draw'`): once the user
  *     picks a card and CONFIRM_DELETE_CARD fires with kw='delete', the amulet
- *     enqueues an additional 2N backpack draw (separate effect, separate
- *     source). This file verifies that stacking still works.
+ *     enqueues a separate buff/gold proc (+1 temp atk / +1 temp armor to both
+ *     slots, +2 gold per equipped copy). This file verifies the stack point
+ *     still fires.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -269,12 +270,12 @@ describe('净册涌泉 end-to-end (simulated hook loop)', () => {
 // ---------------------------------------------------------------------------
 
 describe('净册涌泉 × 招灵书印 stacking', () => {
-  it('CONFIRM_DELETE_CARD on a hand card while wearing 招灵书印 enqueues a separate backpack draw', () => {
-    // The cleanse-draw magic itself no longer dispatches a backpack draw
-    // (the new effect discovers from graveyard instead). What we verify here:
-    // the existing 招灵书印 amulet still fires on the kw='delete' confirm
+  it('CONFIRM_DELETE_CARD on a hand card while wearing 招灵书印 enqueues the buff/gold proc', () => {
+    // The cleanse-draw magic itself discovers from graveyard. What we verify
+    // here: the existing 招灵书印 amulet still fires on the kw='delete' confirm
     // coming from cleanse-draw's hand picker, completely independently of
-    // the magic effect.
+    // the magic effect — but now its effect is +1 temp atk / +1 temp armor
+    // to both slots and +2 gold (rather than a backpack draw).
     const target = makeFiller('hand-victim');
     const state = makeState({
       handCards: [target] as any,
@@ -295,10 +296,20 @@ describe('净册涌泉 × 招灵书印 stacking', () => {
       source: 'hand',
     } as any);
 
-    const backpackDraw = result.enqueuedActions.find(
-      (a: any) => a.type === 'DRAW_CARDS' && a.source === 'backpack',
-    );
-    expect(backpackDraw).toBeDefined();
-    expect((backpackDraw as any)?.count).toBe(2);
+    const actions = result.enqueuedActions ?? [];
+    const sum = (type: string, slotId?: string) =>
+      actions
+        .filter((a: any) => a.type === type && (slotId === undefined || a.slotId === slotId))
+        .reduce((acc: number, a: any) => acc + (a.delta ?? 0), 0);
+
+    // 1 delete × 1 amulet = 1 proc.
+    expect(sum('MODIFY_SLOT_TEMP_ATTACK', 'equipmentSlot1')).toBe(1);
+    expect(sum('MODIFY_SLOT_TEMP_ATTACK', 'equipmentSlot2')).toBe(1);
+    expect(sum('MODIFY_SLOT_TEMP_ARMOR', 'equipmentSlot1')).toBe(1);
+    expect(sum('MODIFY_SLOT_TEMP_ARMOR', 'equipmentSlot2')).toBe(1);
+    const goldDelta = actions
+      .filter((a: any) => a.type === 'MODIFY_GOLD' && a.source === 'amulet:delete-draw')
+      .reduce((acc: number, a: any) => acc + a.delta, 0);
+    expect(goldDelta).toBe(2);
   });
 });

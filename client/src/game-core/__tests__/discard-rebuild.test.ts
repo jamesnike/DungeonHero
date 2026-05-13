@@ -1004,8 +1004,7 @@ describe('弃装重铸 (knight:discard-rebuild)', () => {
 
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-    // Salvage rescued the weapon → only +1 to hand (the salvaged weapon),
-    // NO 招灵书印 draw (would otherwise add 2 backpack cards to hand).
+    // Salvage rescued the weapon → no destruction → 招灵书印 does NOT fire.
     // After: -1 (弃装重铸 leaves hand) + 1 (salvaged weapon) = handBefore.
     expect(result.state.handCards.length).toBe(handBefore);
     expect(result.state.handCards.some(c => c.id === 'w-no-dd')).toBe(true);

@@ -171,8 +171,8 @@ const damageClassDiscoverAmulet: CardTextFormatter = (card) => {
 };
 
 const stunUpgradeCapAmulet: CardTextFormatter = () => ({
-  description: '每击晕一次怪物，击晕上限 +12%。',
-  shortDescription: '每击晕怪物 1 次：击晕上限 +12%',
+  description: '每击晕一次怪物，手牌加入 1 张 Instant magic「震慑符印」：选择一个怪物，以当前击晕上限的几率尝试击晕（手牌满则落到背包）。',
+  shortDescription: '每击晕怪物 1 次：手牌 +1 张「震慑符印」',
 });
 
 // `_counterDisplay` stays in the on-upgrade handler.

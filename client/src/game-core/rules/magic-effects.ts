@@ -145,6 +145,7 @@
  * │ KNIGHT discard-rebuild           │ A   │ discover queue ×N             │
  * │ KNIGHT armor-stun-convert        │ B   │ pick slot twice               │
  * │ KNIGHT stun-cap-strike           │ A/B │ damage ×N + draw ×N + 1 dice  │
+ * │ MAGIC stun-sigil                 │ C   │ pick + 1 dice; echo banner    │
  * │ KNIGHT backpack-bolt             │ A   │ dmg ×N + draw floor(dmg/3)    │
  * │ KNIGHT recycle-bolt              │ A   │ damage ×N (single-target)     │
  * │ KNIGHT lay-mine                  │ A   │ spawn N mines (distinct slots)│
@@ -2564,7 +2565,7 @@ export function resolveKnightInstantMagic(
     }
 
     case 'forge-reborn': {
-      // 回炉重造（唯一 Instant）:
+      // 回炉重造（Instant）:
       //   1) 失去 ⌊hp/2⌋ HP（selfInflicted，同 blood-sacrifice-strike 等可致死）;
       //   2) 删除所有手牌（含诅咒、含 Perm 牌）→ destination: 'graveyard'，
       //      强制送入坟场，绕过 perm-routing 的回收袋分流（同 Shop kw='delete'）。
@@ -4936,6 +4937,56 @@ export function resolveRepairOne(
   // APPLY_DAMAGE 在 pipeline.ts isInputContinuation 白名单里，会在 awaitingMagicTarget
   // 相位下正常 drain。
   return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+/**
+ * 震慑符印 (`magic:stun-sigil`) — Instant magic token spawned by 震慑之符 on
+ * every monster stun. Picks a monster, requests a single `flowId: 'hero-stun'`
+ * dice with `stunPct = state.stunCap` (per user spec: 命中率沿用全局击晕上限).
+ *
+ * Recursion: the dice's 'stun' outcome resolves through `hero.ts:reduceResolveDice`
+ * `flowId === 'hero-stun'` branch, which fires `applyStunCardGrant` again — so
+ * one successful 震慑符印 cast can spawn another 震慑符印 if 震慑之符 is equipped.
+ *
+ * Echo (C-class): single execution + banner if echoMultiplier > 1.
+ * Mirror of 雷涌一击 stun-cap-strike convention「stun dice rolls only once even
+ * on echo」— since 震慑符印 has no damage / no draw component, echo is effectively
+ * a no-op.
+ */
+export function resolveStunSigil(
+  state: GameState,
+  card: GameCardData,
+  sideEffects: SideEffect[],
+  patch: Partial<GameState>,
+  enqueuedActions: GameAction[],
+  echoMultiplier: number,
+  isEchoTriggered: boolean,
+): ReduceResult {
+  const stunPct = state.stunCap ?? 0;
+  const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
+  const hasUnstunnedTarget = monsters.some(m => !(m as GameCardData).isStunned);
+
+  if (monsters.length === 0 || !hasUnstunnedTarget) {
+    banner(sideEffects, `${card.name}：没有可击晕的怪物。`);
+    log(sideEffects, 'magic', `${card.name}：当前行无可击晕目标。`);
+    patch.lastPlayedCardCategory = getCardPlayCategory(card);
+    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+
+  const echoTag = isEchoTriggered && echoMultiplier > 1
+    ? `（回响×${echoMultiplier}：击晕只判定 1 次）`
+    : '';
+
+  patch.pendingMagicAction = {
+    card,
+    effect: 'stun-sigil',
+    step: 'monster-select',
+    prompt: `${card.name}：选择一个怪物，${stunPct}% 击晕。${echoTag}`,
+    data: { stunPct },
+  } as any;
+  patch.heroSkillBanner = `${card.name}：选择目标（${stunPct}% 击晕）。`;
+  return applyPatch(state, patch, sideEffects);
 }
 
 export function resolveStunStrike(

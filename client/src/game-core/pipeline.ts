@@ -366,6 +366,14 @@ function isInputContinuation(action: GameAction): boolean {
     case 'MODIFY_PERMANENT_STAT':
     case 'MODIFY_STUN_CAP':
     case 'MODIFY_EQUIPMENT_DURABILITY':
+    // Slot temp attack / armor — enqueued by 招灵书印 (`delete-draw` amulet)
+    // proc per `deleteDrawTrigger.ts`. Same pattern as MODIFY_GOLD: small
+    // bookkeeping mutation that should always drain in input phases so the
+    // buff/gold rewards land in the same `drain()` call as the destroy /
+    // delete that triggered them. Without this, follow-ups would strand
+    // and the buffs would only apply on the next user action.
+    case 'MODIFY_SLOT_TEMP_ATTACK':
+    case 'MODIFY_SLOT_TEMP_ARMOR':
     case 'ADD_TO_GRAVEYARD':
     case 'ADD_TO_RECYCLE_BAG':
     case 'ADD_TO_BACKPACK':

@@ -28,6 +28,7 @@ import { SHOP_EQUIP_BOOST_COST, SHOP_SKILL_DISCOVER_COST, SHOP_REFRESH_COST, MAX
 import { shuffle as rngShuffle, nextId } from '../rng';
 import { applyAmplifyOnCreate } from '../helpers';
 import { computeAmuletEffectsForState } from '../equipment';
+import { maybeTriggerDeleteDrawForDelete } from '../deleteDrawTrigger';
 import { minionImage, createStarterHealEchoCard } from '../deck';
 import { cloneClassCardWithFreshId, sampleDistinctByName } from '../cardClone';
 import { BASE_BACKPACK_CAPACITY } from '../constants';
@@ -1108,22 +1109,16 @@ function reduceConfirmDeleteCard(
   }
 
   // 「招灵书印」(delete-draw): every "删除" (move-out-of-game) — shop or event —
-  // triggers 2 × N draws from backpack, where N is the number of equipped
-  // copies. Only fires for kw === 'delete'; discard/recycle/move-to do not
-  // count as 删除.
+  // fires the buff/gold proc per equipped copy. Only fires for kw === 'delete';
+  // discard / recycle / move-to do not count as 删除.
   if (kw === 'delete') {
     const ae = computeAmuletEffectsForState(state);
-    if (ae.deleteDrawCount > 0) {
-      const drawCount = 2 * ae.deleteDrawCount;
-      enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
-      sideEffects.push({
-        event: 'log:entry',
-        payload: {
-          type: 'amulet',
-          message: `招灵书印：删除「${cardToDelete.name}」，从背包抽 ${drawCount} 张牌`,
-        },
-      });
-    }
+    maybeTriggerDeleteDrawForDelete({
+      cardLabel: cardToDelete.name,
+      amuletCount: ae.deleteDrawCount,
+      sideEffects,
+      enqueuedActions,
+    });
   }
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);

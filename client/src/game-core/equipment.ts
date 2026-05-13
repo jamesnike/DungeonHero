@@ -492,8 +492,10 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'card-gain-missile': effects.cardGainMissileCount += 1; break;
       case 'swap-upgrade': effects.swapUpgradeCount += 1; break;
       case 'stun-upgrade-cap':
-        effects.stunUpgradeCapCount += 1;
-        effects.stunUpgradeCapBonus += upgradeLevel >= 1 ? 12 : 8;
+        // 震慑之符：每击晕怪物时，往手牌加入 1 张 Instant magic「震慑符印」（手满落背包）。
+        // amuletEffect id 仍为 'stun-upgrade-cap'（兼容存档），但行为已彻底重做：
+        // 不再 bump stunCap，而是按 Discrete event ×N 给每个护符各自 grant 1 张牌。
+        effects.stunCardGrantCount += 1;
         break;
       case 'recycle-backpack-expand': effects.recycleBackpackExpandCount += 1; break;
       case 'dungeon-gold': effects.dungeonGoldCount += 1; break;

@@ -72,6 +72,7 @@ import {
   resolveOverkillUpgrade,
   resolveRepairOne,
   resolveStunStrike,
+  resolveStunSigil,
   resolveScalingDamage,
   // Routing resolvers for knight effects
   resolveKnightPermanentMagic,
@@ -695,6 +696,17 @@ const persuadeBoostDraw: CardDefinition = {
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   },
+};
+
+// 震慑符印 — Instant magic spawned by 震慑之符 amulet on every monster stun.
+// Picks a monster, single dice with stunPct = state.stunCap. Recursion: dice
+// outcome 'stun' goes through hero.ts hero-stun resolver, fires the amulet again.
+// Echo: C-class (single execution + banner if echo).
+const stunSigil: CardDefinition = {
+  effectId: 'magic:stun-sigil',
+  effects: [],
+  tags: ['magic', 'instant', 'stun', 'interactive'],
+  resolver: resolveStunSigil,
 };
 
 const bountySpellDamage: CardDefinition = {
@@ -2135,7 +2147,7 @@ const knightDeckJudgeDelete: CardDefinition = {
   },
 };
 
-// knight:forge-reborn (回炉重造) — Unique Instant.
+// knight:forge-reborn (回炉重造) — Instant.
 //   1) Lose floor(hp/2) HP (selfInflicted, can be lethal).
 //   2) Delete every hand card (curses + Perm 牌 included) via DELETE_CARD
 //      destination: 'graveyard' — force-grave route, bypasses perm-routing
@@ -2773,6 +2785,7 @@ const allMagicDefinitions: CardDefinition[] = [
   guildRecycleReshuffle,
   crossroadsLeftSwap,
   persuadeBoostDraw,
+  stunSigil,
   bountySpellDamage,
   arcaneShieldStunCap,
   stormVolleyRecycle,

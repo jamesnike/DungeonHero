@@ -11,6 +11,7 @@ import { HAND_LIMIT, BASE_BACKPACK_CAPACITY, DUNGEON_COLUMN_COUNT, clampMaxDurab
 import { isBackpackRestrictedCard, flattenActiveRowSlots, isRecyclableFromHand } from './helpers';
 import { applyMonsterRage } from '@/lib/monsterRage';
 import { createMirrorCopySummonCard } from '@/lib/knightDeck';
+import { createStunSigilCard } from './deck';
 import type { RngState } from './rng';
 import { nextInt, shuffle as rngShuffle } from './rng';
 
@@ -244,6 +245,91 @@ export function applyMirrorCopySummonProgress(
     payload: { count: triggers, threshold: MIRROR_COPY_SUMMON_THRESHOLD },
   });
   enqueuedActions.push({ type: 'ADD_CARDS_TO_HAND', cards: grantedCards });
+}
+
+// ---------------------------------------------------------------------------
+// 震慑之符 — 「震慑符印」grant on monster stun
+// ---------------------------------------------------------------------------
+
+/**
+ * 震慑之符 (`amuletEffect: 'stun-upgrade-cap'`) 的新行为入口：每次怪物被击晕时
+ * 调用一次，按 `Discrete event ×N` stacking pattern 给每个护符各自生成 1 张
+ * Instant magic「震慑符印」加入手牌；手牌满则落到背包；背包也满则进回收袋
+ * （走 `addCardToBackpackPure` 的标准 overflow 链）。
+ *
+ * 调用方：所有「实际把怪物 isStunned 翻成 true」的 reducer 路径。当前接入：
+ *   - `combat.ts` PERFORM_SHIELD_BASH 完美格挡盾击晕分支
+ *   - `combat.ts` PERFORM_HERO_ATTACK 武器击晕（stun-strike weapon perm 路径）
+ *   - `hero.ts` RESOLVE_DICE flowId='hero-stun' 'stun' outcome（雷震 / 雷涌一击 /
+ *     震慑符印自身均经此路径）
+ *   - `hero.ts` RESOLVE_DICE flowId='flank-stun' 'stun' outcome（侧击击晕）
+ *
+ * 历史上没接入的击晕路径（保持不动）：`magic-effects.ts` 永恒护符 missile-stun-20
+ * 弹幕击晕、`economy.ts` 混沌事件全场击晕。
+ */
+export function applyStunCardGrant(
+  state: GameState,
+  patch: Partial<GameState>,
+  sideEffects: SideEffect[],
+  grantCount: number,
+): void {
+  if (grantCount <= 0) return;
+
+  let rng = patch.rng ?? state.rng;
+  const cards: GameCardData[] = [];
+  for (let i = 0; i < grantCount; i++) {
+    const [card, nextRng] = createStunSigilCard(rng);
+    rng = nextRng;
+    cards.push(card);
+  }
+  patch.rng = rng;
+
+  // Hand first (per amulet spec), then spill to backpack via standard
+  // addCardToBackpackPure (which itself spills to recycle bag if backpack full).
+  const currentHand = (patch.handCards ?? state.handCards) as GameCardData[];
+  const handLimit = getEffectiveHandLimit(state);
+  const handAvail = Math.max(0, handLimit - currentHand.length);
+
+  const toHand = cards.slice(0, handAvail);
+  const toOverflow = cards.slice(toHand.length);
+
+  if (toHand.length > 0) {
+    patch.handCards = [...currentHand, ...toHand];
+  }
+
+  let backpackLanded = 0;
+  let recycleLanded = 0;
+  if (toOverflow.length > 0) {
+    let projectedState: GameState = { ...state, ...patch } as GameState;
+    for (const c of toOverflow) {
+      const result = addCardToBackpackPure(projectedState, c);
+      Object.assign(patch, result);
+      if (result.backpackItems) {
+        backpackLanded += 1;
+        projectedState = { ...projectedState, backpackItems: result.backpackItems };
+      } else if (result.permanentMagicRecycleBag) {
+        recycleLanded += 1;
+        projectedState = { ...projectedState, permanentMagicRecycleBag: result.permanentMagicRecycleBag };
+      }
+    }
+  }
+
+  const parts: string[] = [];
+  if (toHand.length > 0) parts.push(`${toHand.length} 入手牌`);
+  if (backpackLanded > 0) parts.push(`${backpackLanded} 入背包`);
+  if (recycleLanded > 0) parts.push(`${recycleLanded} 入回收袋`);
+
+  sideEffects.push({
+    event: 'log:entry',
+    payload: {
+      type: 'amulet',
+      message: `震慑之符：获得 ${cards.length} 张「震慑符印」（${parts.join('，')}）`,
+    },
+  });
+  sideEffects.push({
+    event: 'ui:banner',
+    payload: { text: `震慑之符：获得 ${cards.length} 张「震慑符印」` },
+  });
 }
 
 // ---------------------------------------------------------------------------

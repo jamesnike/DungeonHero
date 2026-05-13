@@ -160,6 +160,8 @@ import dedupeKnightMagicGraveNovaImage from '@assets/generated_images/card_dedup
 import dedupeStarterThunderStrikeImage from '@assets/generated_images/card_dedupe_starter_thunder_strike.png';
 // 「弹幕骰局」翻转出的 amulet（card-gain-missile）仍然引用此图，所以保留 import。
 import starterAmuletMissileImage from '@assets/generated_images/starter_amulet_missile.png';
+// 震慑符印（震慑之符 grant 的 Instant magic token）暂时复用震慑之符的图避免新增 PNG。
+import starterAmuletStunCapImage from '@assets/generated_images/starter_amulet_stun_cap.png';
 import dedupeStarterBackpackSizePotionImage from '@assets/generated_images/card_dedupe_starter_potion_backpack_size.png';
 import dedupeStarterSlotCapacityPotionImage from '@assets/generated_images/card_dedupe_potion_slot_capacity_starter.png';
 
@@ -2818,6 +2820,34 @@ export function createMagicBoltCard(rng: RngState): [GameCardData, RngState] {
     magicEffect: '一次性：选择一个怪物，造成 1 点法术伤害。',
     description: '选择一个怪物，造成 1 点法术伤害。',
     shortDescription: '对一个怪物造成 1 法伤',
+  } as GameCardData;
+  return [card, nextRng];
+}
+
+// ---------------------------------------------------------------------------
+// 震慑符印 (stun-sigil) — Instant magic token spawned by 震慑之符 (stun-upgrade-cap
+// amulet) on every monster stun. Picks a monster and rolls a single stun dice
+// using the global state.stunCap as success rate.
+//
+// Routing: `magicEffect: 'stun-sigil'` → registry id `magic:stun-sigil` (priority
+// higher than starterBaseId, so the runtime id format isn't constrained by
+// `getStarterBaseId` strippability).
+//
+// Image reuse: shares the amulet's PNG to avoid asset gen.
+// ---------------------------------------------------------------------------
+
+export function createStunSigilCard(rng: RngState): [GameCardData, RngState] {
+  const [id, nextRng] = nextId(rng, 'stun-sigil');
+  const card: GameCardData = {
+    id,
+    type: 'magic',
+    name: '震慑符印',
+    value: 0,
+    image: starterAmuletStunCapImage,
+    magicType: 'instant',
+    magicEffect: 'stun-sigil',
+    description: '选择一个怪物：以当前击晕上限的几率尝试击晕。',
+    shortDescription: '尝试击晕一个怪物（成功率=击晕上限）',
   } as GameCardData;
   return [card, nextRng];
 }

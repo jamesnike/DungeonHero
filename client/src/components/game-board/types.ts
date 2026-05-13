@@ -491,6 +491,15 @@ export type PendingMagicAction =
       allowsHeroTarget?: boolean;
     }
   | {
+      // 震慑符印 — 震慑之符 grant 的 Instant magic：对一个怪物以当前击晕上限尝试击晕。
+      // C-class echo (single execution + banner)；不允许 hero 自伤。
+      card: GameCardData;
+      effect: 'stun-sigil';
+      step: 'monster-select';
+      prompt: string;
+      data?: { stunPct: number };
+    }
+  | {
       // 囊中惊雷：对一个目标造成 floor(背包剩余卡牌数 × pct%) 法术伤害。
       // pct 由升级等级决定（lvl 0 → 50, lvl 1 → 75, lvl 2 → 100）。
       // 单目标伤害 magic，允许打 hero / 盾自伤；echo (A) 单次结算，伤害 ×N。
@@ -1086,7 +1095,11 @@ export type ActiveAmuletEffects = {
   attackPersuadeDiscountCount: number;
   cardGainMissileCount: number;
   swapUpgradeCount: number;
-  stunUpgradeCapCount: number;
+  /** 震慑之符：每击晕一次怪物，往手牌加入 N 张 Instant magic「震慑符印」。
+   *  `Discrete event ×N` stacking — N 个护符同时持有时，每次击晕生成 N 张牌。
+   *  历史名称：`stunUpgradeCapCount`（旧行为是按击晕上限 +%叠加，已弃用）。
+   *  amulet effect id 仍为 'stun-upgrade-cap'（不动以兼容存档）。 */
+  stunCardGrantCount: number;
   recycleBackpackExpandCount: number;
   dungeonGoldCount: number;
   armorHalveEndureCount: number;

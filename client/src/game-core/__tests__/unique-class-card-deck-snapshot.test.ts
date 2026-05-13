@@ -46,7 +46,6 @@ import { createRng } from '../rng';
 const EXPECTED_UNIQUE_NAMES = [
   '利刃风暴',
   '回收灵焰',
-  '回炉重造',
   '固壁侧守',
   '圣光秘术',
   '复生秘典',

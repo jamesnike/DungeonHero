@@ -941,8 +941,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: knightDeleteDrawAmuletImage,
     classCard: true,
-    description: '每删除或销毁一张牌（含护符/装备被事件、魔法、瀑流销毁），从背包随机抽 2 张牌。',
-    shortDescription: '每删除/销毁 1 张牌，背包抽 2 张',
+    description: '每删除或销毁一张牌（含护符/装备被事件、魔法、瀑流销毁），左右装备栏临时攻击+1、临时护甲+1，金币+2。',
+    shortDescription: '每删除/销毁 1 张牌，双栏临时攻防+1、金币+2',
     amuletEffect: 'delete-draw',
   });
 
@@ -1227,7 +1227,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     knightEffect: 'mirror-copy',
   });
 
-  // 回炉重造 (unique Instant magic): 失去 ⌊hp/2⌋ HP，强制将所有手牌（含诅咒、
+  // 回炉重造 (Instant magic): 失去 ⌊hp/2⌋ HP，强制将所有手牌（含诅咒、
   // 含 Perm 牌）经 DELETE_CARD（destination: 'graveyard'）送入坟场——和 Shop
   // 「删除」(`kw='delete'`) 语义一致：绕过 perm-routing-on-discard 的回收袋分流，
   // 自然触发「招灵书印」(delete-draw amulet)、不触发 APPLY_DISCARD_EFFECTS。
@@ -1241,7 +1241,6 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicCleanseDrawImage,
     classCard: true,
-    unique: true,
     description: '一次性：失去 ⌊当前生命 ÷ 2⌋ 点生命，删除所有手牌（含诅咒，强制送入坟场），然后发现等量的专属牌（直接加入手牌）。',
     shortDescription: '失去半血；删除全部手牌；发现等量专属牌进入手牌',
     magicType: 'instant',

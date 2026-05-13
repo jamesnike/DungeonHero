@@ -36,7 +36,7 @@ import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, isRecy
 import { hasEternalRelic } from '@/lib/eternalRelics';
 import { hasPassiveSkillOrRelic } from '../hero';
 import { applySlotArmorBonusDelta, computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure } from '../equipment';
-import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
+import { maybeTriggerDeleteDrawForDelete, maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { computeEquipmentDisplacementLastWords } from './equipment-effects';
 import { routeReflectDamageToHero, tickStunAttemptDiscoverProgress } from './combat';
 import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT, DUNGEON_COLUMN_COUNT, DURABILITY_CAP, clampMaxDurability } from '../constants';
@@ -1446,17 +1446,12 @@ function reduceDeleteCard(
   // coverage of `DELETE_CARD` exercises the same path.
   const enqueuedActions: GameAction[] = [];
   const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
-  if (ae.deleteDrawCount > 0) {
-    const drawCount = 2 * ae.deleteDrawCount;
-    enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
-    sideEffects.push({
-      event: 'log:entry',
-      payload: {
-        type: 'amulet',
-        message: `招灵书印：删除「${cardToDelete.name}」，从背包抽 ${drawCount} 张牌`,
-      },
-    });
-  }
+  maybeTriggerDeleteDrawForDelete({
+    cardLabel: cardToDelete.name,
+    amuletCount: ae.deleteDrawCount,
+    sideEffects,
+    enqueuedActions,
+  });
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);
 }

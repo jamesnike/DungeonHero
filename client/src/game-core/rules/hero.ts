@@ -33,7 +33,7 @@ import {
   isMagicGaugeFull,
   markSkillUsedPure,
 } from '../hero';
-import { drawFromBackpackToHandPure, drawMultipleFromBackpack, applyMirrorCopySummonProgress } from '../cards';
+import { drawFromBackpackToHandPure, drawMultipleFromBackpack, applyMirrorCopySummonProgress, applyStunCardGrant } from '../cards';
 import { computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle, clearSlotAndPromoteReserve, accumulateMineDamageBoost, processMineCollisions, clearTriggeredMineSlots } from './equipment-effects';
 import { applyShieldSlotSelfDamage } from './shield-self-damage';
 import { tickStunAttemptDiscoverProgress } from './combat';
@@ -2834,6 +2834,57 @@ function reduceMagicMonsterSelection(
         { dealtDamage: true });
     }
 
+    case 'stun-sigil': {
+      // 震慑符印 — 震慑之符 grant 的 Instant magic：单 dice 击晕判定（命中率 = 当前
+      // 击晕上限）。echo 不再 reprompt（C-class），单次结算。
+      // 此分支不设 allowsHeroTarget → 顶层守卫保证 monster 必为非空。
+      const m = monster!;
+      const stunPct = Math.min((pending as any).data?.stunPct ?? 0, state.stunCap ?? 0);
+      const threshold = Math.round((stunPct / 100) * 20);
+
+      if (m.isStunned) {
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：${m.name} 已被击晕，效果失效。` } });
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `${pending.card.name}：${m.name} 已被击晕。`,
+          { dealtDamage: false });
+      }
+
+      ensureEngaged(state, m, enqueuedActions);
+
+      if (threshold <= 0) {
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：击晕上限 0%，无法击晕 ${m.name}。` } });
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `${pending.card.name}：击晕上限 0%。`,
+          { dealtDamage: false });
+      }
+
+      const [ssRoll, ssRng] = nextInt(patch.rng ?? state.rng, 1, 20);
+      patch.rng = ssRng;
+      sideEffects.push({ event: 'ui:requestDice', payload: {
+        title: m.name,
+        subtitle: `${pending.card.name} 击晕判定（${stunPct}%）`,
+        entries: [
+          { id: 'stun', range: [1, threshold] as [number, number], label: '击晕成功！', effect: 'none' },
+          { id: 'miss', range: [threshold + 1, 20] as [number, number], label: '未击晕', effect: 'none' },
+        ],
+        context: {
+          flowId: 'hero-stun',
+          sourceLabel: pending.card.name,
+          monsterId: m.id,
+          monsterName: m.name,
+          currentHit: 1,
+          totalHits: 1,
+          stunPct,
+          magicCardId: pending.card.id,
+        },
+        predeterminedRoll: ssRoll,
+      } });
+      tickStunAttemptDiscoverProgress(state, patch, sideEffects);
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${pending.card.name}：${m.name} 击晕判定 ${stunPct}%`,
+        { dealtDamage: false });
+    }
+
     case 'stat-swap': {
       // 此分支不设 allowsHeroTarget → 顶层守卫保证 monster 必为非空。
       const m = monster!;
@@ -3478,11 +3529,7 @@ function reduceDiceForHero(
           sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `击晕回收：从回收袋取回「${pickedCards.map(c => c.name).join('」「')}」到手牌` } });
         }
       }
-      if (ae.stunUpgradeCapCount > 0) {
-        const bump = ae.stunUpgradeCapBonus;
-        patch.stunCap = Math.min(100, (state.stunCap ?? 0) + bump);
-        sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +${bump}%（当前 ${patch.stunCap}%）` } });
-      }
+      applyStunCardGrant(state, patch, sideEffects, ae.stunCardGrantCount);
       maybeEnqueueStunGold(state, enqueuedActions, sideEffects, monsterId, monsterName);
     } else if (currentHit < totalHits) {
       const threshold = Math.round((stunPct / 100) * 20);
@@ -3509,11 +3556,7 @@ function reduceDiceForHero(
       enqueuedActions.push({ type: 'UPDATE_MONSTER_CARD', monsterId, patch: { isStunned: true } });
       sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monsterName} 被侧击击晕了！` } });
       const ae = computeAmuletEffectsForState(state) ?? createEmptyAmuletEffects();
-      if (ae.stunUpgradeCapCount > 0) {
-        const bump = ae.stunUpgradeCapBonus;
-        patch.stunCap = Math.min(100, (state.stunCap ?? 0) + bump);
-        sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +${bump}%（当前 ${patch.stunCap}%）` } });
-      }
+      applyStunCardGrant(state, patch, sideEffects, ae.stunCardGrantCount);
       maybeEnqueueStunGold(state, enqueuedActions, sideEffects, monsterId, monsterName);
     }
     return applyPatch(state, patch, sideEffects, enqueuedActions);

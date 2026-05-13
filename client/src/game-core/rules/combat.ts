@@ -37,7 +37,7 @@ import { flattenActiveRowSlots, isDamageableTarget, isRecyclableFromHand, applyA
 import { computeEquipmentBreakEffects, computeDurabilityLossEffects, processMineCollisions, clearTriggeredMineSlots } from './equipment-effects';
 import { maybeEnqueueStunGold } from './economy';
 import { createBugletCard, createMagicBoltCard, goblinImage, bugletImage } from '../deck';
-import { addCardToBackpackPure, resetCardForGraveyard } from '../cards';
+import { addCardToBackpackPure, resetCardForGraveyard, applyStunCardGrant } from '../cards';
 import { generateMonsterRewardOptions, queueMonsterRewardPure } from '../monsters';
 import { hasPassiveSkillOrRelic } from '../hero';
 import type { MonsterSkillKey } from '../monsterSkillNames';
@@ -2394,16 +2394,8 @@ function reducePerformShieldBash(
           });
         }
 
-        // Stun upgrade cap — each amulet contributes 8% (L0) or 12% (L1) per trigger.
-        if (ae.stunUpgradeCapCount > 0) {
-          const bump = ae.stunUpgradeCapBonus;
-          const nextCap = Math.min(100, state.stunCap + bump);
-          patch.stunCap = nextCap;
-          sideEffects.push({
-            event: 'log:entry',
-            payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +${bump}%（当前 ${nextCap}%）` },
-          });
-        }
+        // 震慑之符 — each amulet grants 1 Instant magic「震慑符印」 per stun.
+        applyStunCardGrant(state, patch, sideEffects, ae.stunCardGrantCount);
 
         // 雷金护符 — +10×N gold, then immediately remove this monster's stun.
         maybeEnqueueStunGold(state, enqueuedActions, sideEffects, targetMonster.id, targetMonster.name);
@@ -3518,16 +3510,8 @@ function reducePerformHeroAttack(
               });
             }
 
-            // Stun upgrade cap — each amulet contributes 8% (L0) or 12% (L1) per trigger.
-            if (ae.stunUpgradeCapCount > 0) {
-              const bump = ae.stunUpgradeCapBonus;
-              const nextCap = Math.min(100, (patch.stunCap ?? state.stunCap) + bump);
-              patch.stunCap = nextCap;
-              sideEffects.push({
-                event: 'log:entry',
-                payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +${bump}%（当前 ${nextCap}%）` },
-              });
-            }
+            // 震慑之符 — each amulet grants 1 Instant magic「震慑符印」 per stun.
+            applyStunCardGrant(state, patch, sideEffects, ae.stunCardGrantCount);
 
             // 雷金护符 — +10×N gold, then immediately remove this monster's stun.
             maybeEnqueueStunGold(state, enqueuedActions, sideEffects, targetMonster.id, targetMonster.name);

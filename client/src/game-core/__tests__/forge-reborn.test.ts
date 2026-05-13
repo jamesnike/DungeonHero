@@ -1,5 +1,5 @@
 /**
- * 回炉重造 (knight:forge-reborn) — Unique Instant magic.
+ * 回炉重造 (knight:forge-reborn) — Instant magic.
  *
  * Behavior:
  *   - Lose floor(state.hp / 2) HP via APPLY_DAMAGE selfInflicted (can be lethal).
@@ -16,8 +16,9 @@
  *     "无手牌可删除".
  *   - Echo: does NOT participate. echoMultiplier ignored. isEchoTriggered just
  *     appends a banner note. doubleNextMagic still consumed by the engine.
- *   - 招灵书印 (delete-draw amulet): each DELETE_CARD triggers it → N×(2×amuletCount)
- *     backpack draws total.
+ *   - 招灵书印 (delete-draw amulet): each DELETE_CARD triggers it → both equipment
+ *     slots gain +1 temp attack & +1 temp armor, player gains +2 gold per proc;
+ *     totalProcs = N × M (deleted cards × surviving 招灵书印).
  *
  * Fixtures use `phase: 'playerInput'` per `pipeline-input-continuation.mdc` so
  * the DELETE_CARD / BEGIN_DISCOVER / APPLY_DAMAGE follow-up chain fully drains
@@ -49,7 +50,6 @@ function makeForgeReborn(idSuffix = 'fr'): GameCardData {
     value: 0,
     image: '',
     classCard: true,
-    unique: true,
     magicType: 'instant',
     magicEffect: '即时魔法：失去半血，删除手牌，发现等量专属牌。',
     description: 'test',
@@ -113,6 +113,11 @@ const DELETE_DRAW_AMULET: GameCardData = {
   value: 1,
   image: '',
   amuletEffect: 'delete-draw',
+} as unknown as GameCardData;
+
+const DELETE_DRAW_AMULET_2: GameCardData = {
+  ...DELETE_DRAW_AMULET,
+  id: 'amu-delete-draw-2',
 } as unknown as GameCardData;
 
 describe('回炉重造 (knight:forge-reborn)', () => {
@@ -308,14 +313,16 @@ describe('回炉重造 (knight:forge-reborn)', () => {
     expect(result.state.discardedCards.some(c => c.id === 'h-1')).toBe(true);
   });
 
-  it('招灵书印 (delete-draw) amulet stacks: 3 deletes × 1 amulet = 3 × (2×1) = 6 backpack draws', () => {
+  it('招灵书印 (delete-draw) amulet stacks: 3 deletes × 1 amulet = 3 procs of (+1 atk, +1 armor, +2 gold) per slot', () => {
     const card = makeForgeReborn('amu');
     const c1 = makeHandCard('h-1');
     const c2 = makeHandCard('h-2');
     const c3 = makeHandCard('h-3');
     const bp = Array.from({ length: 10 }, (_, i) => makeHandCard(`bp-${i}`));
+    const goldBefore = 0;
     const state = makeState({
       hp: 20,
+      gold: goldBefore,
       amuletSlots: [DELETE_DRAW_AMULET] as any,
       handCards: [card, c1, c2, c3],
       backpackItems: bp,
@@ -324,17 +331,52 @@ describe('回炉重造 (knight:forge-reborn)', () => {
 
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-    // delete-draw fires once per DELETE_CARD: 3 cards × 2 draws/amulet = 6 cards moved
-    // from backpack to hand. Each DELETE_CARD enqueues a separate DRAW_CARDS so
-    // total drawn = 6.
-    const handIdsFromBp = result.state.handCards
-      .map(c => c.id)
-      .filter(id => id.startsWith('bp-'));
-    expect(handIdsFromBp).toHaveLength(6);
-    // Backpack shrunk by exactly 6.
-    expect(result.state.backpackItems.length).toBe(10 - 6);
+    // delete-draw fires once per DELETE_CARD: 3 deletes × 1 amulet = 3 procs.
+    // Each proc: +1 temp atk to both slots, +1 temp armor to both slots, +2 gold.
+    expect(result.state.slotTempAttack.equipmentSlot1).toBe(3);
+    expect(result.state.slotTempAttack.equipmentSlot2).toBe(3);
+    expect(result.state.slotTempArmor.equipmentSlot1).toBe(3);
+    expect(result.state.slotTempArmor.equipmentSlot2).toBe(3);
+    expect(result.state.gold).toBe(goldBefore + 6);
 
     // Multiple "招灵书印" log entries (one per delete).
+    const amuletLogs = result.sideEffects.filter(
+      e =>
+        e.event === 'log:entry' &&
+        (e.payload as any)?.type === 'amulet' &&
+        String((e.payload as any)?.message ?? '').includes('招灵书印'),
+    );
+    expect(amuletLogs).toHaveLength(3);
+  });
+
+  it('招灵书印 (delete-draw) full N × M scaling: 3 deletes × 2 amulets = 6 procs (+6 atk / +6 armor / +12 gold per slot)', () => {
+    const card = makeForgeReborn('amu-x2');
+    const c1 = makeHandCard('h-1');
+    const c2 = makeHandCard('h-2');
+    const c3 = makeHandCard('h-3');
+    const bp = Array.from({ length: 10 }, (_, i) => makeHandCard(`bp-${i}`));
+    const goldBefore = 0;
+    const state = makeState({
+      hp: 20,
+      gold: goldBefore,
+      amuletSlots: [DELETE_DRAW_AMULET, DELETE_DRAW_AMULET_2] as any,
+      handCards: [card, c1, c2, c3],
+      backpackItems: bp,
+      classDeck: [makeClassCard('cd-1'), makeClassCard('cd-2'), makeClassCard('cd-3')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // 3 DELETE_CARDs × M=2 amulets each = 6 procs total.
+    // Each proc: +1 atk, +1 armor, +2 gold.
+    expect(result.state.slotTempAttack.equipmentSlot1).toBe(6);
+    expect(result.state.slotTempAttack.equipmentSlot2).toBe(6);
+    expect(result.state.slotTempArmor.equipmentSlot1).toBe(6);
+    expect(result.state.slotTempArmor.equipmentSlot2).toBe(6);
+    expect(result.state.gold).toBe(goldBefore + 12);
+
+    // One log per DELETE_CARD (3 deletes → 3 logs; each log message bundles the
+    // M-amulet proc into a single "+M / +M / +2M" line per the helper format).
     const amuletLogs = result.sideEffects.filter(
       e =>
         e.event === 'log:entry' &&
