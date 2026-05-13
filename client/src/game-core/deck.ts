@@ -92,6 +92,7 @@ import lifeAmuletImage from '@assets/generated_images/chibi_life_amulet.png';
 import strengthAmuletImage from '@assets/generated_images/chibi_strength_amulet.png';
 import dedupeAmuletCatapultImage from '@assets/generated_images/card_dedupe_amulet_catapult.png';
 import dedupeAmuletGraveyardStackImage from '@assets/generated_images/card_dedupe_amulet_graveyard_stack.png';
+import starterGraveyardStackAmuletImage from '@assets/generated_images/starter_graveyard_stack_amulet.png';
 import balanceAmuletImage from '@assets/generated_images/chibi_balance_amulet.png';
 import lifestealAmuletImage from '@assets/generated_images/chibi_lifesteal_amulet.png';
 import flashAmuletImage from '@assets/generated_images/chibi_flash_amulet.png';
@@ -938,7 +939,7 @@ export function createDeck(
       type: 'amulet',
       name: 'Graveyard Amulet',
       value: 5,
-      image: dedupeAmuletGraveyardStackImage,
+      image: starterGraveyardStackAmuletImage,
       description: '劝降成功时，在原怪物格堆叠2张墓地随机牌。',
       shortDescription: '劝降成功时该格堆叠 2 张坟场牌',
       amuletEffect: 'persuade-graveyard-stack',
