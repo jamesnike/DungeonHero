@@ -1410,7 +1410,7 @@ function reduceMagicSlotSelection(
 
     case 'recycle-temp-armor': {
       // 池中坚意：buff = floor(state.permanentMagicRecycleBag.length / divisor) * echo
-      // - divisor = 4 (Lv0) / 3 (Lv1)
+      // - divisor = 3 (Lv0) / 2 (Lv1)
       // - 空槽允许选（与 backpack-temp-attack / event-armor-etch 一致）：
       //   buff 写到 equipmentSlotBonuses[slotId].shield（永久护甲加成绑定槽位 id，
       //   不在装备上），等装备进入时仍生效，且**跨瀑流 / 跨回合不清零**。
@@ -1423,7 +1423,7 @@ function reduceMagicSlotSelection(
       // - 不调 checkPersuadeOnTempAttack：怀柔之印 只对临时攻击 / 临时护甲 gain
       //   触发，永久护甲不算（参考 装甲铸蚀 实现）。
       const echoMul = (pending as any).echoMultiplier ?? 1;
-      const divisor = (pending.card.upgradeLevel ?? 0) >= 1 ? 3 : 4;
+      const divisor = (pending.card.upgradeLevel ?? 0) >= 1 ? 2 : 3;
       const recycleLen = state.permanentMagicRecycleBag.length;
       const baseBuff = Math.floor(recycleLen / divisor);
       const buff = baseBuff * echoMul;

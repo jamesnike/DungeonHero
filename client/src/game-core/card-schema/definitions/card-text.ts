@@ -743,11 +743,11 @@ const backpackTempAttack: CardTextFormatter = (card) => {
   };
 };
 
-// 池中坚意：升级表 [4, 3]（divisor）。Lv0 每 4 张牌 +1，Lv1 每 3 张牌 +1。
+// 池中坚意：升级表 [3, 2]（divisor）。Lv0 每 3 张牌 +1，Lv1 每 2 张牌 +1。
 // 注：effect id `knight:recycle-temp-armor` 是历史命名，语义已改为永久护甲。
 const recycleTempArmor: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
-  const divisors = [4, 3];
+  const divisors = [3, 2];
   const div = pick(divisors, level);
   return {
     description: `永久：选择一个装备栏，回收袋每 ${div} 张牌 +1 永久护甲。`,

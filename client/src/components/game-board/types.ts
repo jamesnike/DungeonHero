@@ -662,7 +662,7 @@ export type PendingMagicAction =
   | {
       // 池中坚意：选择装备栏（允许空槽），按 floor(回收袋数 / divisor) 加**永久**护甲
       // （写入 equipmentSlotBonuses[slotId].shield，跟 event-armor-etch 同口径）。
-      // divisor = 4 (Lv0) / 3 (Lv1)。
+      // divisor = 3 (Lv0) / 2 (Lv1)。
       // 注：effect id `recycle-temp-armor` 是历史命名，语义已改为永久护甲；
       // 不重命名以减少跨文件改动面。
       card: GameCardData;

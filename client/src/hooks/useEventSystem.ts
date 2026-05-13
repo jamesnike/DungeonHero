@@ -1855,10 +1855,12 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       }
 
     // --- vault-flipback: close event, deal damage, flip card back ---
+    // 卡面文案「翻转回去」明示这是一次翻转，因此必须命中所有 amulet/equipment
+    // 的翻转联动（熔炉之心 / 翻印之符 / 翻覆震慑 / 熔铸耐久 / 翻血之符 /
+    // 弧能之符 / 生长之盾）。原子的「替换 active 格 / 加入手牌 + 触发翻转计数」
+    // 走 APPLY_VAULT_BACK_FLIP reducer，跟其它 6 条 back-flip 路径行为一致。
     } else if (token === 'vault-flipback') {
       const eventCardSnapshot = eventCard;
-      const ac = engine.getState().activeCards;
-      const cellIdx = ac.findIndex(c => c?.id === eventCardSnapshot?.id);
 
       dispatch({ type: 'SET_EVENT_MODAL_OPEN', open: false });
       dispatch({ type: 'SET_EVENT_MODAL_MINIMIZED', minimized: false });
@@ -1869,17 +1871,8 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       dispatch({ type: 'APPLY_DAMAGE', amount: damage, source: 'event-vault-explore' });
       addGameLog('event', `秘藏宝库深入探索：受到 ${damage} 点伤害`);
 
-      const flipBack = eventCardSnapshot?._flipBackCard;
-      if (cellIdx !== -1 && flipBack) {
-        dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: (prev: (GameCardData | null)[]) => {
-          const next = [...prev];
-          next[cellIdx] = { ...flipBack };
-          return next;
-        }});
-        addGameLog('event', '秘藏宝库翻转回未开启状态');
-      } else if (cellIdx === -1 && flipBack && flipBack.type === 'event') {
-        depsRef.current.queueCardIntoHand({ ...flipBack });
-        addGameLog('event', '秘藏宝库翻转回未开启状态，加入手牌');
+      if (eventCardSnapshot?._flipBackCard) {
+        dispatch({ type: 'APPLY_VAULT_BACK_FLIP', card: eventCardSnapshot });
       }
       dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `深入探索！受到 ${damage} 点伤害！` });
 

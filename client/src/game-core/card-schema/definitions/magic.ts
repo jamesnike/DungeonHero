@@ -2529,7 +2529,7 @@ const knightAmplifyEquipmentShift: CardDefinition = {
 // floor(state.permanentMagicRecycleBag.length / divisor) PERMANENT armor to the
 // chosen slot via equipmentSlotBonuses[slotId].shield (same field as 装甲铸蚀
 // / event-armor-etch).
-// - divisor = 4 (L0) / 3 (L1).
+// - divisor = 3 (L0) / 2 (L1).
 // - Empty slots are allowed (bonus binds to the slot id, not the equipment, so
 //   it carries over to whatever装备 the player swaps in later — mirror of
 //   event-armor-etch).
@@ -2551,7 +2551,7 @@ const knightRecycleTempArmor: CardDefinition = {
   tags: ['knight', 'permanent', 'interactive', 'buff'],
   resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
     const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
-    const divisor = (card.upgradeLevel ?? 0) >= 1 ? 3 : 4;
+    const divisor = (card.upgradeLevel ?? 0) >= 1 ? 2 : 3;
     const previewBuff = Math.floor(state.permanentMagicRecycleBag.length / divisor) * echoMultiplier;
     patch.pendingMagicAction = {
       card,

@@ -7,7 +7,7 @@
  *
  * On play: opens slot-select. On RESOLVE_MAGIC_SLOT_SELECTION:
  *   buff = floor(state.permanentMagicRecycleBag.length / divisor) * echoMultiplier
- *   divisor = 4 (Lv0) / 3 (Lv1)
+ *   divisor = 3 (Lv0) / 2 (Lv1)
  *   equipmentSlotBonuses[chosenSlot].shield += buff
  *   applySlotArmorBonusDelta refreshes equipped shield/monster armor cap
  *
@@ -42,7 +42,7 @@ function makeCard(idSuffix = 'rta', upgradeLevel = 0) {
     image: '',
     classCard: true,
     magicType: 'permanent' as const,
-    magicEffect: '永久魔法：选择一个装备栏，回收袋每 4 张牌 +1 永久护甲。',
+    magicEffect: '永久魔法：选择一个装备栏，回收袋每 3 张牌 +1 永久护甲。',
     description: 'test',
     knightEffect: 'recycle-temp-armor',
     recycleDelay: 1,
@@ -90,7 +90,7 @@ describe('池中坚意 主效果: slot-select → floor(recycleBag.length / divi
     expect((result.state.pendingMagicAction as any).step).toBe('slot-select');
   });
 
-  it('Lv0, recycleBag=12 → floor(12/4)=3 → equipmentSlotBonuses[chosenSlot].shield +3', () => {
+  it('Lv0, recycleBag=12 → floor(12/3)=4 → equipmentSlotBonuses[chosenSlot].shield +4', () => {
     const card = makeCard('lv0', 0);
     const state = makeState({
       handCards: [card],
@@ -107,16 +107,16 @@ describe('池中坚意 主效果: slot-select → floor(recycleBag.length / divi
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'recycle-temp-armor', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(before1 + 3);
+    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(before1 + 4);
     expect(result.state.equipmentSlotBonuses.equipmentSlot2.shield).toBe(before2);
     expect(result.state.pendingMagicAction).toBeNull();
   });
 
-  it('Lv0, recycleBag=3 → floor(3/4)=0 → +0 buff but still resolves', () => {
+  it('Lv0, recycleBag=2 → floor(2/3)=0 → +0 buff but still resolves', () => {
     const card = makeCard('zero', 0);
     const state = makeState({
       handCards: [card],
-      permanentMagicRecycleBag: makeRecycleBag(3),
+      permanentMagicRecycleBag: makeRecycleBag(2),
       pendingMagicAction: {
         card,
         effect: 'recycle-temp-armor',
@@ -132,11 +132,11 @@ describe('池中坚意 主效果: slot-select → floor(recycleBag.length / divi
     expect(result.state.pendingMagicAction).toBeNull();
   });
 
-  it('Lv0, recycleBag=15 → floor(15/4)=3 (rounding down)', () => {
+  it('Lv0, recycleBag=14 → floor(14/3)=4 (rounding down)', () => {
     const card = makeCard('round', 0);
     const state = makeState({
       handCards: [card],
-      permanentMagicRecycleBag: makeRecycleBag(15),
+      permanentMagicRecycleBag: makeRecycleBag(14),
       pendingMagicAction: {
         card,
         effect: 'recycle-temp-armor',
@@ -148,10 +148,10 @@ describe('池中坚意 主效果: slot-select → floor(recycleBag.length / divi
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'recycle-temp-armor', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(before + 3);
+    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(before + 4);
   });
 
-  it('Lv1 (divisor=3), recycleBag=10 → floor(10/3)=3', () => {
+  it('Lv1 (divisor=2), recycleBag=10 → floor(10/2)=5', () => {
     const card = makeCard('lv1', 1);
     const state = makeState({
       handCards: [card],
@@ -167,10 +167,10 @@ describe('池中坚意 主效果: slot-select → floor(recycleBag.length / divi
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'recycle-temp-armor', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(before + 3);
+    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(before + 5);
   });
 
-  it('Lv1, recycleBag=12 → floor(12/3)=4 (compared to Lv0 which would be 3)', () => {
+  it('Lv1, recycleBag=12 → floor(12/2)=6 (compared to Lv0 which would be 4)', () => {
     const card = makeCard('lv1-12', 1);
     const state = makeState({
       handCards: [card],
@@ -186,7 +186,7 @@ describe('池中坚意 主效果: slot-select → floor(recycleBag.length / divi
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'recycle-temp-armor', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(before + 4);
+    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(before + 6);
   });
 
   it('empty slot allowed: bonus still applied to chosen empty slot', () => {
@@ -233,10 +233,10 @@ describe('池中坚意 主效果: slot-select → floor(recycleBag.length / divi
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'recycle-temp-armor', slotId: 'equipmentSlot2' } as GameAction,
     ]);
     expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(5);
-    expect(result.state.equipmentSlotBonuses.equipmentSlot2.shield).toBe(7 + 3);
+    expect(result.state.equipmentSlotBonuses.equipmentSlot2.shield).toBe(7 + 4);
   });
 
-  it('echoMultiplier x2: floor(12/4)=3, ×2=6 buff', () => {
+  it('echoMultiplier x2: floor(12/3)=4, ×2=8 buff', () => {
     const card = makeCard('echo', 0);
     const state = makeState({
       handCards: [card],
@@ -253,7 +253,7 @@ describe('池中坚意 主效果: slot-select → floor(recycleBag.length / divi
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'recycle-temp-armor', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(before + 6);
+    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(before + 8);
   });
 
   it('echoMultiplier x2 with recycleBag=2 (base=0) → 0×2=0 (zero stays zero)', () => {
@@ -323,14 +323,16 @@ describe('池中坚意 主效果: slot-select → floor(recycleBag.length / divi
     const state = makeState({
       phase: 'playerInput',
       handCards: [card],
-      permanentMagicRecycleBag: makeRecycleBag(4),
+      permanentMagicRecycleBag: makeRecycleBag(5),
     });
     const before = state.equipmentSlotBonuses.equipmentSlot1.shield;
     const afterPlay = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
     const afterResolve = drain(afterPlay.state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'recycle-temp-armor', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    // floor(4/4) = 1, NOT floor(5/4) = 1 — disambiguate with bag=4 (boundary).
+    // floor(5/3)=1, NOT floor(6/3)=2 — bag=5 sits right below the next
+    // divisor multiple, so if this card were wrongly counted as already in
+    // the recycle bag (size 6) the buff would jump from 1 to 2.
     expect(afterResolve.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(before + 1);
   });
 
@@ -379,12 +381,12 @@ describe('池中坚意 - permanent armor specific invariants', () => {
     expect(result.state.slotTempArmor?.equipmentSlot1 ?? 0).toBe(0);
     expect(result.state.slotTempArmor?.equipmentSlot2 ?? 0).toBe(0);
     // …while the perm bonus DID land.
-    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(3);
+    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(4);
   });
 
   it('equipped shield: applySlotArmorBonusDelta refreshes current armor toward new cap', () => {
-    // Shield value=3 (base armor cap=3); buff +3 → new cap=6.
-    // armor field stored at 1 (half-depleted) → new armor = min(1+3, 6) = 4.
+    // Shield value=3 (base armor cap=3); buff +4 → new cap=7.
+    // armor field stored at 1 (half-depleted) → new armor = min(1+4, 7) = 5.
     const card = makeCard('refresh', 0);
     const equippedShield = makeShield('eq-1', { armor: 1 });
     const state = makeState({
@@ -401,9 +403,9 @@ describe('池中坚意 - permanent armor specific invariants', () => {
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'recycle-temp-armor', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(3);
+    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(4);
     const eq = result.state.equipmentSlot1 as any;
-    expect(eq?.armor).toBe(4); // 1 + 3, capped to 6 = 4
+    expect(eq?.armor).toBe(5); // 1 + 4, capped to 7 = 5
   });
 
   it('does NOT trigger 怀柔之印 (persuade-on-temp-attack) — perm armor is not temp', () => {
@@ -433,7 +435,7 @@ describe('池中坚意 - permanent armor specific invariants', () => {
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'recycle-temp-armor', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(3); // bonus 落地
+    expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(4); // bonus 落地
     expect(result.state.persuadeAmuletBonus ?? 0).toBe(0); // 但劝降加成未触发
   });
 

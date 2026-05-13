@@ -611,6 +611,27 @@ export interface ApplyCardFlipAction {
   cellIndex?: number;
 }
 
+/**
+ * APPLY_VAULT_BACK_FLIP — reverse-flip the opened 秘藏宝库 card back to its
+ * closed form (`_flipBackCard`), and trigger the 7 flip-counter consumers.
+ *
+ * 触发时机：玩家在 `秘藏宝库（已开启）` 选了「深入探索（受 4 伤害，翻转回去）」
+ * 选项（effect token: 'vault-flipback'）。该选项在卡面文案上写明「翻转回去」，
+ * 玩家直觉是「这算一次翻转」，所以必须命中所有 amulet/equipment 的翻转联动
+ * （熔炉之心 / 翻印之符 / 翻覆震慑 / 熔铸耐久 / 翻血之符 / 弧能之符 / 生长之盾）。
+ *
+ * 与 6 条已存在的 back-flip 路径行为一致：在 reducer 内调 `applyFlipCounters`，
+ * 不走 APPLY_CARD_FLIP（避免 forward-flip 的 flipTarget 转化逻辑）。
+ *
+ * Hook 层 (`useEventSystem.ts` `vault-flipback` 分支) 仅 dispatch 一次本 action，
+ * 把背景的「替换 active 格 / 加入手牌 + 触发翻转计数」打成原子步骤。
+ */
+export interface ApplyVaultBackFlipAction {
+  type: 'APPLY_VAULT_BACK_FLIP';
+  /** The currently-opened vault card (has `_flipBackCard` pointing to the closed vault). */
+  card: GameCardData;
+}
+
 export interface DisposeEquipmentCardAction {
   type: 'DISPOSE_EQUIPMENT_CARD';
   card: GameCardData;
@@ -2267,6 +2288,7 @@ export type GameAction =
   // Discard side effects / card flip / equipment dispose
   | ApplyDiscardEffectsAction
   | ApplyCardFlipAction
+  | ApplyVaultBackFlipAction
   | DisposeEquipmentCardAction
   | DiscardOwnedCardAction
   | SacrificeEquipmentSlotAction

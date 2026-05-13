@@ -97,6 +97,8 @@ export function reduceCardActions(state: GameState, action: GameAction): ReduceR
       return reduceApplyDiscardEffects(state, action);
     case 'APPLY_CARD_FLIP':
       return reduceApplyCardFlip(state, action);
+    case 'APPLY_VAULT_BACK_FLIP':
+      return reduceApplyVaultBackFlip(state, action);
     case 'DISPOSE_EQUIPMENT_CARD':
       return reduceDisposeEquipmentCard(state, action);
     case 'DISCARD_OWNED_CARD':
@@ -1823,6 +1825,71 @@ function reduceApplyCardFlip(
       payload: { fromCard: card, toCard: flip.toCard, message: flip.message ?? '', hasFlipGold: amuletFxForOverlay.flipGoldCount > 0 },
     });
   }
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+// ---------------------------------------------------------------------------
+// APPLY_VAULT_BACK_FLIP — 秘藏宝库（已开启）「深入探索（受 4 伤害，翻转回去）」
+// 选项的"翻回"步骤。
+//
+// 该选项卡面文案明示「翻转回去」，玩家直觉是「这算一次翻转」，必须命中所有
+// flip-counter 消费方（熔炉之心 / 翻印之符 / 翻覆震慑 / 熔铸耐久 / 翻血之符 /
+// 弧能之符 / 生长之盾）—— 跟现有的 6 条 back-flip 路径行为一致：
+//
+//   1. 乾坤一翻 active-row back-flip (rules/hero.ts case 'flip-active-card')
+//   2. 乾坤一翻 starterActiveRowFlip resolver back-flip (magic.ts)
+//   3. 乾坤一翻 preview-row reveal (rules/hero.ts + magic.ts)
+//   4. 血誓回卷 single-target auto-resolve (rules/magic-effects.ts)
+//   5. 血誓回卷 multi-target selection (rules/hero.ts case 'flip-back-active')
+//   6. 翻转之契 flipAllActiveRow (events.ts)
+//
+// 历史 bug：vault-flipback 的「替换 active 格」一直是在 hook 层用
+// `UPDATE_ACTIVE_CARDS` 直接做的，绕过了 applyFlipCounters，导致选项卡面写
+// 「翻转回去」但 7 个 flip 联动全部哑火。
+//
+// 本 action 必须 owner = active-row 路径（`cellIdx !== -1`）和 hand 路径
+// （`cellIdx === -1`，玩家从手牌触发的事件 stay-flipback）都覆盖。
+// ---------------------------------------------------------------------------
+
+function reduceApplyVaultBackFlip(
+  state: GameState,
+  action: Extract<GameAction, { type: 'APPLY_VAULT_BACK_FLIP' }>,
+): ReduceResult {
+  const { card } = action;
+  const flipBack = card._flipBackCard;
+  if (!flipBack) return noChange(state);
+
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+
+  const restored: GameCardData = { ...flipBack };
+  const idx = state.activeCards.findIndex(c => c?.id === card.id);
+
+  if (idx !== -1) {
+    const newActive = [...state.activeCards] as typeof state.activeCards;
+    newActive[idx] = restored;
+    patch.activeCards = newActive;
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'event', message: `${card.name} 翻回 ${restored.name}` },
+    });
+    sideEffects.push({
+      event: 'card:flippedInCell',
+      payload: { cellIndex: idx, fromCard: card, toCard: restored, message: `${card.name} → ${restored.name}` },
+    });
+  } else {
+    // Source not in active row — vault was triggered from hand. Mirror
+    // reduceApplyCardFlip's stay-from-hand branch: add directly to handCards.
+    patch.handCards = [...state.handCards, restored];
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'event', message: `${card.name} 翻回 ${restored.name}，加入手牌` },
+    });
+  }
+
+  applyFlipCounters(state, patch, sideEffects, enqueuedActions);
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);
 }

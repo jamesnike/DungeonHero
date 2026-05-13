@@ -6723,7 +6723,8 @@ export default function GameBoard() {
 
         if (amuletEffects.monsterEquipBuffCount > 0) {
           const bump = amuletEffects.monsterEquipBuffCount;
-          setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + bump);
+          const attackBump = bump * 2;
+          setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + attackBump);
           setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + bump);
           let durMsg = '';
           if (equipCard.durability != null && equipCard.maxDurability != null) {
@@ -6734,8 +6735,8 @@ export default function GameBoard() {
               durMsg = `，耐久 +${repaired}`;
             }
           }
-          addGameLog('amulet', `驯兽铸印：${monster.name} 装备栏永久攻击 +${bump}，永久护甲 +${bump}${durMsg}！`);
-          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +${bump}，永久护甲 +${bump}${durMsg}！` });
+          addGameLog('amulet', `驯兽铸印：${monster.name} 装备栏永久攻击 +${attackBump}，永久护甲 +${bump}${durMsg}！`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +${attackBump}，永久护甲 +${bump}${durMsg}！` });
         }
 
         if (monster.monsterType === 'Ogre' || monster.name === 'Ogre') {
@@ -7094,7 +7095,8 @@ export default function GameBoard() {
 
       if (isMonsterFromHand && amuletEffects.monsterEquipBuffCount > 0) {
         const bump = amuletEffects.monsterEquipBuffCount;
-        setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + bump);
+        const attackBump = bump * 2;
+        setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + attackBump);
         setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + bump);
         let durMsg = '';
         if (equipCard.durability != null && equipCard.maxDurability != null) {
@@ -7106,8 +7108,8 @@ export default function GameBoard() {
             durMsg = `，耐久 +${repaired}`;
           }
         }
-        addGameLog('amulet', `驯兽铸印：${equipCard.name} 装备栏永久攻击 +${bump}，永久护甲 +${bump}${durMsg}！`);
-        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +${bump}，永久护甲 +${bump}${durMsg}！` });
+        addGameLog('amulet', `驯兽铸印：${equipCard.name} 装备栏永久攻击 +${attackBump}，永久护甲 +${bump}${durMsg}！`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +${attackBump}，永久护甲 +${bump}${durMsg}！` });
       }
 
       if (isMonsterFromHand && (card.monsterType === 'Ogre' || card.name === 'Ogre')) {

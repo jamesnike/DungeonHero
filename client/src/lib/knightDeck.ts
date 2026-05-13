@@ -919,8 +919,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: monsterEquipBuffAmuletImage,
     classCard: true,
-    description: '每次装备一个怪物时，该装备栏永久攻击 +1，永久护甲 +1，并立即恢复 1 点耐久（不超过耐久上限）。',
-    shortDescription: '装备怪物时本栏永久 +1 攻 / +1 护 / 恢复 1 耐久',
+    description: '每次装备一个怪物时，该装备栏永久攻击 +2，永久护甲 +1，并立即恢复 1 点耐久（不超过耐久上限）。',
+    shortDescription: '装备怪物时本栏永久 +2 攻 / +1 护 / 恢复 1 耐久',
     amuletEffect: 'monster-equip-buff',
   });
 
@@ -1525,7 +1525,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
   });
 
   // 池中坚意 (Perm 1)：选择一个装备栏（允许空槽），按 floor(回收袋牌数 / divisor) 加永久护甲。
-  // - divisor = 4 (Lv0) / 3 (Lv1)
+  // - divisor = 3 (Lv0) / 2 (Lv1)
   // - 这张卡从手牌打出 → 进回收袋（recycleDelay: 1）；slot-select 结算时本卡仍在
   //   pendingMagicAction（不在 recycleBag），所以读到的回收袋数不含本卡——与
   //   「池中惊雷」(recycle-bolt) 同语义。
@@ -1545,10 +1545,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollFortifyFlankImage,
     classCard: true,
-    description: '永久：选择一个装备栏，回收袋每 4 张牌 +1 永久护甲。',
-    shortDescription: '所选栏 +回收袋数÷4 永久护甲',
+    description: '永久：选择一个装备栏，回收袋每 3 张牌 +1 永久护甲。',
+    shortDescription: '所选栏 +回收袋数÷3 永久护甲',
     magicType: 'permanent',
-    magicEffect: '永久魔法：选择一个装备栏，回收袋每 4 张牌 +1 永久护甲。',
+    magicEffect: '永久魔法：选择一个装备栏，回收袋每 3 张牌 +1 永久护甲。',
     knightEffect: 'recycle-temp-armor',
     recycleDelay: 1,
     maxUpgradeLevel: 1,
