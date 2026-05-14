@@ -432,25 +432,24 @@ function HeroCardInner({
             </div>
           )}
 
-          {!isFlat && (
-            <>
-              {/* HP Section */}
-              <div className={`relative z-10 py-1.5 ${isCompact ? 'px-1' : 'px-3'}`}>
-                <div className={`bg-background/95 rounded-lg ${isCompact ? 'p-1' : 'p-1.5'}`}>
-                  <div className="flex items-center justify-between mb-0.5">
-                    <Heart className="dh-hero-icon text-destructive" />
-                    <span className="dh-hero-hp font-mono font-bold" data-testid="hero-hp">
-                      {hp}/{maxHp}
-                    </span>
-                  </div>
-                  <Progress value={hpPercentage} className="h-1.5" />
-                </div>
+          {/* HP Section — 始终显示，包括 flat（宽高比 > 1.8）布局。
+              历史上曾经 wrap 在 !isFlat 里以省垂直空间，但代价是玩家在
+              Hero Cell 上彻底看不到血量（只剩 GameHeader 角标），违反
+              「英雄卡显示英雄状态」的核心直觉。 */}
+          <div className={`relative z-10 py-1.5 ${isCompact ? 'px-1' : 'px-3'}`}>
+            <div className={`bg-background/95 rounded-lg ${isCompact ? 'p-1' : 'p-1.5'}`}>
+              <div className="flex items-center justify-between mb-0.5">
+                <Heart className="dh-hero-icon text-destructive" />
+                <span className="dh-hero-hp font-mono font-bold" data-testid="hero-hp">
+                  {hp}/{maxHp}
+                </span>
               </div>
+              <Progress value={hpPercentage} className="h-1.5" />
+            </div>
+          </div>
 
-              {/* Thin separator */}
-              <div className="h-px mx-6 bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" />
-            </>
-          )}
+          {/* Thin separator */}
+          <div className="h-px mx-6 bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" />
 
           {/* Content area - skills and magic */}
           <div className={`relative z-10 flex-1 overflow-y-auto py-1.5 flex flex-col gap-1.5 items-stretch justify-start ${isCompact ? 'px-0.5' : 'px-2'}`}>

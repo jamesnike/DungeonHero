@@ -1105,6 +1105,86 @@ function reducePlaceBuildingInDungeon(
   const patch: Partial<GameState> = {};
   const enqueuedActions: GameAction[] = [];
 
+  // ---------------------------------------------------------------------------
+  // 地雷分支（building + mineDamage > 0）
+  // ---------------------------------------------------------------------------
+  // 行为完全镜像 lay-mine magic resolver（rules/magic-effects.ts case 'lay-mine'）
+  // 与 reducePlayCard 的 building+mineDamage 分支：
+  //   - 候选池 = active row 空位 ∪ ghost building 格（uniform 随机抽 1 个）
+  //   - 落到 ghost 格时，原 ghost 沉到 activeCardStacks[col] 末尾，新地雷成为顶层
+  //   - 候选池为空（怪物/事件/非 ghost 建筑占满）→ fizzle，卡**不进坟场**
+  //     （consumed_no_grave 语义：手牌 -1，地雷 -1 = 净位移；hook 已经在
+  //     dispatch 之前消耗了来源 = consumeCardFromHand / UPDATE_BACKPACK_ITEMS）
+  //   - emit `magic:layMine` 让 UI 播放标准布雷动画
+  //   - 不加 `hasReleaseCharge` / `_fateBladeLastSlot`（命运之刃专用字段）
+  // ---------------------------------------------------------------------------
+  if (card.type === 'building' && (card.mineDamage ?? 0) > 0) {
+    const activeSlots = state.activeCards as (GameCardData | null)[];
+    const candidateIdxs: number[] = [];
+    for (let i = 0; i < activeSlots.length; i++) {
+      const c = activeSlots[i];
+      if (c === null || c.isGhost === true) candidateIdxs.push(i);
+    }
+
+    if (candidateIdxs.length === 0) {
+      // Fizzle：卡照样消耗（来源已被 hook 移除），但不进坟场也不进回收袋
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'event', message: `「${card.name}」：激活行无可用位置（既无空位也无幽灵建筑可堆叠），地雷未能放置。` },
+      });
+      sideEffects.push({
+        event: 'ui:banner',
+        payload: { text: `${card.name}：激活行无可用位置（既无空位也无幽灵建筑可堆叠）。` },
+      });
+      patch.heroSkillBanner = `${card.name}：激活行无可用位置。`;
+    } else {
+      const [pickIdx, nextRng] = nextInt(state.rng, 0, candidateIdxs.length - 1);
+      const slotIdx = candidateIdxs[pickIdx];
+
+      const newActive = [...activeSlots];
+      const newStacks: Record<number, GameCardData[]> = { ...state.activeCardStacks };
+
+      const existing = newActive[slotIdx];
+      let stackNote = '';
+      if (existing) {
+        // 候选池保证 existing 必为 ghost building；推到 stack 末尾 = next-to-pop
+        // （跟 lay-mine resolver / reducePlayCard 同款 stack-on-top 写法）。
+        newStacks[slotIdx] = [...(newStacks[slotIdx] ?? []), existing];
+        stackNote = `（堆于 ${existing.name} 上）`;
+      }
+
+      // 卡本身作为地雷放到激活行；剥离手牌专用元数据（fromSlot / _recycleWaits）。
+      const { fromSlot: _drop1, _recycleWaits: _drop2, ...mineOnRow } =
+        card as GameCardData & { fromSlot?: string; _recycleWaits?: number };
+
+      newActive[slotIdx] = mineOnRow as GameCardData;
+
+      patch.activeCards = newActive as ActiveRowSlots;
+      patch.activeCardStacks = newStacks;
+      patch.rng = nextRng;
+      patch.heroSkillBanner = `${card.name}：布下地雷于槽 ${slotIdx + 1}！`;
+
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'event', message: `${card.name}：${source === 'hand' ? '手牌' : '背包'}打出，布于槽 ${slotIdx + 1}${stackNote}。` },
+      });
+      sideEffects.push({
+        event: 'ui:banner',
+        payload: { text: `${card.name}：布下地雷于槽 ${slotIdx + 1}！` },
+      });
+      sideEffects.push({
+        event: 'magic:layMine',
+        payload: { slots: [{ idx: slotIdx, mineId: mineOnRow.id }], droppedCount: 0 },
+      });
+    }
+
+    enqueuedActions.push({ type: 'APPLY_TRANSFORM_CATEGORY', card });
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 默认 building 分支（命运之刃 / 增幅祭坛 / 其它带 eventChoices 的事件型建筑）
+  // ---------------------------------------------------------------------------
   const emptySlots: number[] = [];
   for (let i = 0; i < DUNGEON_COLUMN_COUNT; i++) {
     if (state.activeCards[i] == null) emptySlots.push(i);

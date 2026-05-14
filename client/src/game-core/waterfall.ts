@@ -222,5 +222,10 @@ export function waterfallResetsPure(state: GameState): Partial<GameState> {
     magicCardsPlayedThisTurn: 0,
     damageMagicPlayedThisTurn: 0,
     arcaneStormMagicCount: 0,
+    // 狂战士之怒（berserker-rage）是「直到下次瀑流」buff——
+    // 与 unbreakableUntilWaterfall 同生命周期。在这里统一清理，避免之前
+    // 把 reset 错放在 START_TURN 导致玩家只能在激活当回合享受 buff。
+    berserkerRageActive: false,
+    berserkerSlotUsed: {},
   };
 }

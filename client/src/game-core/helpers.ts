@@ -98,7 +98,11 @@ export const isHeroRowHighlightCard = (
       card.type === 'hero-magic' ||
       card.type === 'potion' ||
       card.type === 'curse' ||
-      (card.type === 'building' && card.eventChoices)),
+      // Buildings with eventChoices = 命运之刃 / 增幅祭坛 (interactive event-style buildings).
+      // Buildings with mineDamage > 0 = 地雷 (handed to player via 坟场召回 / etc.) — must be
+      // playable from hand & backpack via the hero-row drag path; reducer
+      // `reducePlaceBuildingInDungeon` routes them to the mine-specific placement branch.
+      (card.type === 'building' && (card.eventChoices || (card.mineDamage ?? 0) > 0))),
   );
 
 export const getShopPrice = (card: GameCardData): number => {

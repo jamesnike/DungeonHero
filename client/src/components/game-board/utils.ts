@@ -1295,5 +1295,5 @@ export function createStarterBackpack(): GameCardData[] {
 export const isHeroRowHighlightCard = (
   card: GameCardData | null,
 ): card is GameCardData & { type: HeroRowDropType } =>
-  Boolean(card && (card.type === 'event' || card.type === 'magic' || card.type === 'hero-magic' || card.type === 'potion' || card.type === 'curse' || (card.type === 'building' && card.eventChoices)));
+  Boolean(card && (card.type === 'event' || card.type === 'magic' || card.type === 'hero-magic' || card.type === 'potion' || card.type === 'curse' || (card.type === 'building' && (card.eventChoices || (card.mineDamage ?? 0) > 0))));
 

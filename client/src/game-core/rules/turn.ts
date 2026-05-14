@@ -679,7 +679,11 @@ function reduceStartTurn(
     berserkTurnBuff: createEmptyEquipmentBuffState(),
     extraAttackCharges: 0,
     slotExtraAttacks: { equipmentSlot1: 0, equipmentSlot2: 0 },
-    berserkerRageActive: false,
+    // 注意：`berserkerRageActive` 是 "until next waterfall" 字段（卡面 + GAME_MECHANICS.md §14.2
+    // 都明确写「持续到下次瀑流」），不能在 START_TURN 重置——否则玩家激活 狂战 后只在
+    // 第一个 hero 回合生效，后续回合（同一战斗多轮 / 战斗结束后再开新战斗）全部失效。
+    // 重置职责放在 `waterfallResetsPure`（与 `unbreakableUntilWaterfall` 同生命周期）。
+    // `berserkerSlotUsed` 仍然是 per-turn 字段（每回合每栏只能用一次额外攻击），保留 reset。
     berserkerSlotUsed: {},
     flashSlotUsed: {},
     gambitExtraActive: false,
