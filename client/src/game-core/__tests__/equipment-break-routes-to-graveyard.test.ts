@@ -32,7 +32,7 @@ import { describe, expect, it } from 'vitest';
 import { reduce } from '../reducer';
 import { drain } from '../pipeline';
 import { createInitialGameState } from '../state';
-import { initialCombatState, createEmptyAmuletEffects, HAND_LIMIT } from '../constants';
+import { initialCombatState, createEmptyAmuletEffects, HAND_LIMIT, BASE_BACKPACK_CAPACITY } from '../constants';
 import { computeEquipmentBreakEffects } from '../rules/equipment-effects';
 import { createRng } from '../rng';
 import type { GameState } from '../types';
@@ -226,13 +226,10 @@ describe('computeEquipmentBreakEffects — non-Perm equipment routes to graveyar
   });
 
   // ---------------------------------------------------------------------------
-  // graveyard-to-hand (Iron Shield) — hand-full overflow routes the picked
-  // card into the recycle bag (via enqueued ADD_TO_RECYCLE_BAG). Matches
-  // the RETURN_EQUIPMENT_TO_HAND 「装备回手（满则回收袋）」precedent in
-  // rules/cards.ts:2046-2059.
+  // graveyard-to-hand (Iron Shield) — overflow: hand → backpack → recycle.
   // ---------------------------------------------------------------------------
 
-  it('graveyard-to-hand last-words + hand FULL: picked card routes to recycle bag, not hand', () => {
+  it('graveyard-to-hand + hand FULL + backpack has room: picked card enqueues ADD_TO_BACKPACK', () => {
     const ironShield: GameCardData = {
       id: 'iron-1', type: 'shield', name: 'Iron Shield', value: 0, image: '',
       durability: 0, maxDurability: 3, armorMax: 2,
@@ -245,10 +242,61 @@ describe('computeEquipmentBreakEffects — non-Perm equipment routes to graveyar
     const fullHand: GameCardData[] = Array.from({ length: HAND_LIMIT }, (_, i) => ({
       id: `h${i}`, type: 'magic', name: `Filler${i}`, value: 0, image: '',
     }) as GameCardData);
+    const backpackFillers: GameCardData[] = Array.from({ length: BASE_BACKPACK_CAPACITY - 1 }, (_, i) => ({
+      id: `bp${i}`, type: 'magic', name: `Bp${i}`, value: 0, image: '',
+    }) as GameCardData);
     const state = makeState({
       equipmentSlot1: ironShield as EquipmentItem,
       discardedCards: [otherGrave],
       handCards: fullHand,
+      backpackItems: backpackFillers,
+    });
+
+    const result = computeEquipmentBreakEffects(
+      state,
+      'equipmentSlot1',
+      ironShield,
+      createEmptyAmuletEffects(),
+    );
+
+    expect(result.patch.handCards).toBeUndefined();
+    const grave = result.patch.discardedCards as GameCardData[];
+    expect(grave.find(c => c.id === 'pickable')).toBeUndefined();
+    expect(grave.find(c => c.id === 'iron-1')).toBeDefined();
+
+    const addBp = result.enqueuedActions.find(
+      a => a.type === 'ADD_TO_BACKPACK' && (a as any).card.id === 'pickable',
+    );
+    expect(addBp).toBeDefined();
+    expect(result.enqueuedActions.some(a => a.type === 'ADD_TO_RECYCLE_BAG')).toBe(false);
+
+    const log = result.sideEffects.find(
+      e => e.event === 'log:entry' && (e.payload as any)?.message?.includes('进入背包'),
+    );
+    expect(log).toBeDefined();
+  });
+
+  it('graveyard-to-hand last-words + hand AND backpack FULL: picked card routes to recycle bag', () => {
+    const ironShield: GameCardData = {
+      id: 'iron-1', type: 'shield', name: 'Iron Shield', value: 0, image: '',
+      durability: 0, maxDurability: 3, armorMax: 2,
+      armor: 0,
+      onDestroyEffect: 'graveyard-to-hand',
+    };
+    const otherGrave: GameCardData = {
+      id: 'pickable', type: 'magic', name: 'Some Spell', value: 0, image: '',
+    } as GameCardData;
+    const fullHand: GameCardData[] = Array.from({ length: HAND_LIMIT }, (_, i) => ({
+      id: `h${i}`, type: 'magic', name: `Filler${i}`, value: 0, image: '',
+    }) as GameCardData);
+    const fullBackpack: GameCardData[] = Array.from({ length: BASE_BACKPACK_CAPACITY }, (_, i) => ({
+      id: `bp${i}`, type: 'magic', name: `Bp${i}`, value: 0, image: '',
+    }) as GameCardData);
+    const state = makeState({
+      equipmentSlot1: ironShield as EquipmentItem,
+      discardedCards: [otherGrave],
+      handCards: fullHand,
+      backpackItems: fullBackpack,
     });
 
     const result = computeEquipmentBreakEffects(
@@ -277,11 +325,8 @@ describe('computeEquipmentBreakEffects — non-Perm equipment routes to graveyar
     // overflow → 弹幕之符 doesn't trigger when card lands in recycle bag)
     expect(result.sideEffects.some(e => e.event === 'card:newCardGained')).toBe(false);
 
-    // Some log:entry message must mention 「手牌已满」 (there are multiple
-    // log:entry events for this break, e.g. the generic 「遗言触发」 banner;
-    // we just need to find at least one mentioning the recycle-bag fallback).
     const handFullLog = result.sideEffects.find(
-      e => e.event === 'log:entry' && (e.payload as any)?.message?.includes('手牌已满'),
+      e => e.event === 'log:entry' && (e.payload as any)?.message?.includes('手牌与背包已满'),
     );
     expect(handFullLog).toBeDefined();
   });
@@ -302,10 +347,14 @@ describe('computeEquipmentBreakEffects — non-Perm equipment routes to graveyar
     const fullHand: GameCardData[] = Array.from({ length: HAND_LIMIT }, (_, i) => ({
       id: `h${i}`, type: 'magic', name: `Filler${i}`, value: 0, image: '',
     }) as GameCardData);
+    const fullBackpack: GameCardData[] = Array.from({ length: BASE_BACKPACK_CAPACITY }, (_, i) => ({
+      id: `bp${i}`, type: 'magic', name: `Bp${i}`, value: 0, image: '',
+    }) as GameCardData);
     const state = makeState({
       equipmentSlot1: ironShield as EquipmentItem,
       discardedCards: [otherGrave],
       handCards: fullHand,
+      backpackItems: fullBackpack,
       phase: 'playerInput',
     });
 
@@ -328,11 +377,10 @@ describe('computeEquipmentBreakEffects — non-Perm equipment routes to graveyar
   });
 
   // ---------------------------------------------------------------------------
-  // graveyard-event-to-hand (生长之盾) — per-card overflow distribution.
-  // Hand fills up first, remaining picks go to recycle bag.
+  // graveyard-event-to-hand (生长之盾) — per-card overflow: hand → backpack → recycle.
   // ---------------------------------------------------------------------------
 
-  it('graveyard-event-to-hand + hand FULL: all picked events route to recycle bag', () => {
+  it('graveyard-event-to-hand + hand AND backpack FULL: all picked events route to recycle bag', () => {
     const growthShield: GameCardData = {
       id: 'gs-1', type: 'shield', name: '生长之盾', value: 2, image: '',
       durability: 0, maxDurability: 3, armorMax: 2,
@@ -345,10 +393,14 @@ describe('computeEquipmentBreakEffects — non-Perm equipment routes to graveyar
     const fullHand: GameCardData[] = Array.from({ length: HAND_LIMIT }, (_, i) => ({
       id: `h${i}`, type: 'magic', name: `Filler${i}`, value: 0, image: '',
     }) as GameCardData);
+    const fullBackpack: GameCardData[] = Array.from({ length: BASE_BACKPACK_CAPACITY }, (_, i) => ({
+      id: `bp${i}`, type: 'magic', name: `Bp${i}`, value: 0, image: '',
+    }) as GameCardData);
     const state = makeState({
       equipmentSlot1: growthShield as EquipmentItem,
       discardedCards: [ev1, ev2, ev3],
       handCards: fullHand,
+      backpackItems: fullBackpack,
     });
 
     const result = computeEquipmentBreakEffects(
@@ -377,7 +429,7 @@ describe('computeEquipmentBreakEffects — non-Perm equipment routes to graveyar
     expect(result.sideEffects.some(e => e.event === 'card:newCardGained')).toBe(false);
   });
 
-  it('graveyard-event-to-hand + 1 hand slot left, picks 3: 1 to hand, 2 to recycle bag', () => {
+  it('graveyard-event-to-hand + 1 hand slot left, picks 3: 1 to hand, 2 to backpack', () => {
     const growthShield: GameCardData = {
       id: 'gs-2', type: 'shield', name: '生长之盾', value: 2, image: '',
       durability: 0, maxDurability: 3, armorMax: 2,
@@ -410,9 +462,9 @@ describe('computeEquipmentBreakEffects — non-Perm equipment routes to graveyar
     const eventsInHand = handAfter.filter(c => c.id.startsWith('e'));
     expect(eventsInHand).toHaveLength(1);
 
-    // The other 2 went to recycle bag
-    const recycleEnqueues = result.enqueuedActions.filter(a => a.type === 'ADD_TO_RECYCLE_BAG');
-    expect(recycleEnqueues).toHaveLength(2);
+    // The other 2 went to backpack (hand full after first pick)
+    const bpEnqueues = result.enqueuedActions.filter(a => a.type === 'ADD_TO_BACKPACK');
+    expect(bpEnqueues).toHaveLength(2);
 
     // card:newCardGained emitted with count=1 (only the in-hand pickup counts)
     const gained = result.sideEffects.filter(e => e.event === 'card:newCardGained');

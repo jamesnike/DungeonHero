@@ -12,8 +12,9 @@
  * call `applyPatch(state, patch, sideEffects)` WITHOUT passing
  * `enqueuedActions` — which drops:
  *
- *   1. `ADD_TO_RECYCLE_BAG` actions queued by `graveyard-to-hand` /
- *      `graveyard-event-to-hand` when hand becomes full mid-loop.
+ *   1. `ADD_TO_BACKPACK` / `ADD_TO_RECYCLE_BAG` actions queued by
+ *      `graveyard-to-hand` / `graveyard-event-to-hand` when hand becomes full
+ *      mid-loop (and backpack full for recycle).
  *   2. `DRAW_CARDS` / `DRAW_CLASS_TO_BACKPACK` actions for `discard-hand-3` /
  *      `skeletonLastWordsDiscard` lastWords on monster-as-equipment cards.
  *   3. `TRIGGER_MONSTER_SKILL_FLOAT` skill float UI events.
@@ -141,11 +142,11 @@ describe('Iron Shield + 残骸回收符 + 墓园守卫 (Perm) — full last-word
     expect(final.discardedCards.find(c => c.id === 'spell-B')).toBeUndefined();
   });
 
-  it('hand near limit + 2 cards in grave → 1 lands in hand, 2nd routes to recycle bag (NOT vanishes)', () => {
+  it('hand near limit + 2 cards in grave → 1 lands in hand, 2nd routes to backpack (NOT vanishes)', () => {
     // This is the real-world scenario: hand has 1 free spot. Iter 1 lands in
-    // hand, Iter 2 should route to recycle bag (NOT vanish from existence).
-    // Prior bug: salvage early-return drops enqueuedActions → ADD_TO_RECYCLE_BAG
-    // for iter 2's pick is silently dropped, the picked card vanishes.
+    // hand, Iter 2 should route to backpack when hand is full (NOT vanish).
+    // Prior bug: salvage early-return drops enqueuedActions → follow-up pick
+    // for iter 2 is silently dropped, the picked card vanishes.
     const ironShield = makeIronShield();
     const grave1: GameCardData = {
       id: 'spell-A',
@@ -194,10 +195,11 @@ describe('Iron Shield + 残骸回收符 + 墓园守卫 (Perm) — full last-word
     });
     const final = drain(r.state, r.enqueuedActions ?? []).state;
 
-    // Both grave cards must EXIST somewhere (hand or recycle bag).
+    // Both grave cards must EXIST somewhere (hand / backpack / recycle / grave).
     // STRICT: neither may vanish.
     const findCard = (id: string) => ({
       inHand: final.handCards.some(c => c.id === id),
+      inBackpack: final.backpackItems.some(c => c.id === id),
       inRecycle: final.permanentMagicRecycleBag.some(c => c.id === id),
       inGrave: final.discardedCards.some(c => c.id === id),
     });
@@ -205,16 +207,19 @@ describe('Iron Shield + 残骸回收符 + 墓园守卫 (Perm) — full last-word
     const b = findCard('spell-B');
 
     // Both must be accounted for somewhere.
-    expect(a.inHand || a.inRecycle || a.inGrave).toBe(true);
-    expect(b.inHand || b.inRecycle || b.inGrave).toBe(true);
+    expect(a.inHand || a.inBackpack || a.inRecycle || a.inGrave).toBe(true);
+    expect(b.inHand || b.inBackpack || b.inRecycle || b.inGrave).toBe(true);
 
     // Iter 1's pick lands in hand (since hand had 1 free spot).
-    // Iter 2's pick must route to recycle bag (hand is now full).
-    // → exactly 1 of {A, B} in hand, the other in recycle bag.
+    // Iter 2's pick must route to backpack (hand is now full, backpack empty).
+    // → exactly 1 of {A, B} in hand, the other in backpack.
     const inHandCount = (a.inHand ? 1 : 0) + (b.inHand ? 1 : 0);
-    const inRecycleCount = (a.inRecycle ? 1 : 0) + (b.inRecycle ? 1 : 0);
+    const inBackpackCount = (a.inBackpack ? 1 : 0) + (b.inBackpack ? 1 : 0);
     expect(inHandCount).toBe(1);
-    expect(inRecycleCount).toBe(1);
+    expect(inBackpackCount).toBe(1);
+
+    const inRecycleCount = (a.inRecycle ? 1 : 0) + (b.inRecycle ? 1 : 0);
+    expect(inRecycleCount).toBe(0);
 
     // Neither remains in graveyard (both were picked).
     expect(a.inGrave).toBe(false);

@@ -6265,7 +6265,8 @@ export default function GameBoard() {
     // Route spent hand cards to graveyard/recycle immediately after play
     const recordHandCardConsumption = (spentCard: GameCardData) => {
       if (spentCard.type === 'potion') {
-        addToGraveyard(spentCard);
+        // Perm / recycleDelay 分流由 reduceFinalizePotionCard 统一处理（与 PLAY_CARD
+        // 点击路径一致）。此处预 addToGraveyard 会绕过回收袋并造成与 FINALIZE 双写。
         return;
       }
       if (spentCard.type === 'magic' || spentCard.type === 'hero-magic' || spentCard.type === 'curse') {
@@ -6282,53 +6283,56 @@ export default function GameBoard() {
       const handArr = handCardsRef.current;
       const flankIdx = handArr.findIndex(c => c.id === card.id);
       lastPlayedFlankRef.current = flankIdx >= 0 && (flankIdx === 0 || flankIdx === handArr.length - 1);
+      // Drag payload 可能早于「永恒铭刻」等对手牌的最后一次 patch；以引擎手牌为准，
+      // 确保 recycleDelay / Perm 等字段与 FINALIZE_* reducer 一致。
+      const playCardFromEngine = handCards.find(c => c.id === card.id) ?? card;
 
-      if (!consumeCardFromHand(card)) {
+      if (!consumeCardFromHand(playCardFromEngine)) {
         resetDragState();
         return;
       }
 
-      if (card.type === 'building') {
+      if (playCardFromEngine.type === 'building') {
         // Reducer 处理放置 / 命运之刃自伤 / 满位入坟 / transform 链。
         // Hook 已通过 consumeCardFromHand(card) 在前面消耗了来源。
-        dispatch({ type: 'PLACE_BUILDING_IN_DUNGEON', card, source: 'hand' });
+        dispatch({ type: 'PLACE_BUILDING_IN_DUNGEON', card: playCardFromEngine, source: 'hand' });
         resetDragState();
         return;
       }
 
-      recordHandCardConsumption(card);
+      recordHandCardConsumption(playCardFromEngine);
 
       tickRecycleForge();
 
-      if (lastPlayedFlankRef.current && card.flankDraw) {
-        for (let i = 0; i < card.flankDraw; i++) {
+      if (lastPlayedFlankRef.current && playCardFromEngine.flankDraw) {
+        for (let i = 0; i < playCardFromEngine.flankDraw; i++) {
           drawFromBackpackToHand();
         }
-        addGameLog('magic', `侧击效果：${card.name} 抽取 ${card.flankDraw} 张牌`);
-        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 抽取了 ${card.flankDraw} 张牌。` });
+        addGameLog('magic', `侧击效果：${playCardFromEngine.name} 抽取 ${playCardFromEngine.flankDraw} 张牌`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${playCardFromEngine.name} 抽取了 ${playCardFromEngine.flankDraw} 张牌。` });
       }
 
-      if (lastPlayedFlankRef.current && card.flankEffectId) {
-        if (card.flankEffectId.startsWith('persuadeCost-')) {
-          const amount = parseInt(card.flankEffectId.replace('persuadeCost-', ''), 10) || 1;
+      if (lastPlayedFlankRef.current && playCardFromEngine.flankEffectId) {
+        if (playCardFromEngine.flankEffectId.startsWith('persuadeCost-')) {
+          const amount = parseInt(playCardFromEngine.flankEffectId.replace('persuadeCost-', ''), 10) || 1;
           const currentMod = engine.getState().persuadeCostModifier ?? 0;
           const currentCost = PERSUADE_COST + currentMod;
           if (currentCost <= MIN_PERSUADE_COST) {
             addGameLog('event', `劝降费用已达下限（${currentCost} 金币），无法再降低`);
-            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 劝降费用已达下限，无法再降低。` });
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${playCardFromEngine.name} 劝降费用已达下限，无法再降低。` });
           } else {
             const actualAmount = Math.min(amount, currentCost - MIN_PERSUADE_COST);
             dispatch({ type: 'MODIFY_PERMANENT_STAT', stat: 'persuadeCostModifier', delta: -actualAmount });
-            addGameLog('event', `侧击效果：${card.name} 劝降费用永久 -${actualAmount}`);
-            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 劝降费用永久 -${actualAmount}！` });
+            addGameLog('event', `侧击效果：${playCardFromEngine.name} 劝降费用永久 -${actualAmount}`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${playCardFromEngine.name} 劝降费用永久 -${actualAmount}！` });
           }
-        } else if (card.flankEffectId.startsWith('stunCap+')) {
-          const amount = parseInt(card.flankEffectId.replace('stunCap+', ''), 10) || 5;
+        } else if (playCardFromEngine.flankEffectId.startsWith('stunCap+')) {
+          const amount = parseInt(playCardFromEngine.flankEffectId.replace('stunCap+', ''), 10) || 5;
           dispatch({ type: 'MODIFY_STUN_CAP', delta: amount });
-          addGameLog('event', `侧击效果：${card.name} 击晕上限 +${amount}%`);
-          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 击晕上限 +${amount}%！` });
-        } else if (card.flankEffectId.startsWith('damage:')) {
-          const amount = parseInt(card.flankEffectId.replace('damage:', ''), 10) || 5;
+          addGameLog('event', `侧击效果：${playCardFromEngine.name} 击晕上限 +${amount}%`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${playCardFromEngine.name} 击晕上限 +${amount}%！` });
+        } else if (playCardFromEngine.flankEffectId.startsWith('damage:')) {
+          const amount = parseInt(playCardFromEngine.flankEffectId.replace('damage:', ''), 10) || 5;
           const monsters = flattenActiveRowSlots(activeCardsLatestRef.current).filter(
             (c): c is GameCardData => isDamageableTarget(c),
           );
@@ -6342,50 +6346,50 @@ export default function GameBoard() {
               beginCombat(target, 'hero');
             }
             dealDamageToMonster(target, amount);
-            addGameLog('event', `侧击效果：${card.name} 对 ${target.name} 造成 ${amount} 点伤害`);
-            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 对 ${target.name} 造成了 ${amount} 点伤害！` });
+            addGameLog('event', `侧击效果：${playCardFromEngine.name} 对 ${target.name} 造成 ${amount} 点伤害`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${playCardFromEngine.name} 对 ${target.name} 造成了 ${amount} 点伤害！` });
           } else {
-            addGameLog('event', `侧击效果：${card.name} 没有可攻击的怪物`);
+            addGameLog('event', `侧击效果：${playCardFromEngine.name} 没有可攻击的怪物`);
             dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！但没有可攻击的怪物。` });
           }
-        } else if (card.flankEffectId.startsWith('discard-recycle-to-hand:')) {
+        } else if (playCardFromEngine.flankEffectId.startsWith('discard-recycle-to-hand:')) {
           // 唤回秘药·侧击：弃 1 张手牌·从回收袋随机取 N 张到手牌（互动式）。
           // 派单到 reducer 处理 modal/auto 分流，避免在 hook 里复制 reducer 逻辑。
-          const count = parseInt(card.flankEffectId.replace('discard-recycle-to-hand:', ''), 10) || 1;
-          dispatch({ type: 'TRIGGER_FLANK_DISCARD_RECYCLE', card, count });
-        } else if (card.flankEffectId === 'graveyard-random-magic') {
+          const count = parseInt(playCardFromEngine.flankEffectId.replace('discard-recycle-to-hand:', ''), 10) || 1;
+          dispatch({ type: 'TRIGGER_FLANK_DISCARD_RECYCLE', card: playCardFromEngine, count });
+        } else if (playCardFromEngine.flankEffectId === 'graveyard-random-magic') {
           // 蜕变赋灵·侧击：失去 3 点生命，从坟场随机获得一张魔法卡。
           // 派单到 reducer，跟 reducePlayCard flank 分支共享同一份实现。
-          dispatch({ type: 'TRIGGER_FLANK_GRAVEYARD_MAGIC', card });
-        } else if (card.flankEffectId.startsWith('gold:')) {
+          dispatch({ type: 'TRIGGER_FLANK_GRAVEYARD_MAGIC', card: playCardFromEngine });
+        } else if (playCardFromEngine.flankEffectId.startsWith('gold:')) {
           // 附魔祭坛·侧击：+N 金币。跟 reducePlayCard flank 分支保持一致。
-          const amount = parseInt(card.flankEffectId.replace('gold:', ''), 10) || 3;
+          const amount = parseInt(playCardFromEngine.flankEffectId.replace('gold:', ''), 10) || 3;
           dispatch({ type: 'MODIFY_GOLD', delta: amount, source: 'flank-gold' });
-          addGameLog('gold', `侧击效果：${card.name} 获得 ${amount} 金币`);
-          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 获得 ${amount} 金币！` });
-        } else if (card.flankEffectId.startsWith('heal:')) {
+          addGameLog('gold', `侧击效果：${playCardFromEngine.name} 获得 ${amount} 金币`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${playCardFromEngine.name} 获得 ${amount} 金币！` });
+        } else if (playCardFromEngine.flankEffectId.startsWith('heal:')) {
           // 赋能神殿·侧击：恢复 N HP。跟 reducePlayCard flank 分支保持一致。
-          const amount = parseInt(card.flankEffectId.replace('heal:', ''), 10) || 2;
+          const amount = parseInt(playCardFromEngine.flankEffectId.replace('heal:', ''), 10) || 2;
           dispatch({ type: 'HEAL', amount, source: 'flank-heal' });
-          addGameLog('event', `侧击效果：${card.name} 恢复 ${amount} HP`);
-          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 恢复 ${amount} HP！` });
+          addGameLog('event', `侧击效果：${playCardFromEngine.name} 恢复 ${amount} HP`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${playCardFromEngine.name} 恢复 ${amount} HP！` });
         }
       }
 
-      if (card.type === 'monster') {
+      if (playCardFromEngine.type === 'monster') {
         resetDragState();
         return;
-      } else if (card.type === 'potion') {
-        stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== card.id), card];
-        dispatch({ type: 'RESOLVE_POTION', cardId: card.id, card } as any);
-      } else if (card.type === 'magic' || card.type === 'hero-magic' || card.type === 'curse') {
-        stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== card.id), card];
-        dispatch({ type: 'RESOLVE_MAGIC', cardId: card.id, card, isFlank: lastPlayedFlankRef.current } as any);
-      } else if (card.type === 'event') {
+      } else if (playCardFromEngine.type === 'potion') {
+        stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== playCardFromEngine.id), playCardFromEngine];
+        dispatch({ type: 'RESOLVE_POTION', cardId: playCardFromEngine.id, card: playCardFromEngine } as any);
+      } else if (playCardFromEngine.type === 'magic' || playCardFromEngine.type === 'hero-magic' || playCardFromEngine.type === 'curse') {
+        stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== playCardFromEngine.id), playCardFromEngine];
+        dispatch({ type: 'RESOLVE_MAGIC', cardId: playCardFromEngine.id, card: playCardFromEngine, isFlank: lastPlayedFlankRef.current } as any);
+      } else if (playCardFromEngine.type === 'event') {
         startEventResolution(null, 'hand');
-        const cleanedCard = card.eventChoices
-          ? { ...card, eventChoices: card.eventChoices.filter(c => c.effect !== 'crossroads-destroy-below') }
-          : card;
+        const cleanedCard = playCardFromEngine.eventChoices
+          ? { ...playCardFromEngine, eventChoices: playCardFromEngine.eventChoices.filter(c => c.effect !== 'crossroads-destroy-below') }
+          : playCardFromEngine;
         // SET_CURRENT_EVENT reducer auto-enqueues APPLY_TRANSFORM_CATEGORY.
         dispatch({ type: 'SET_CURRENT_EVENT', card: cleanedCard });
         eventChoiceProcessingRef.current = false;
@@ -6410,11 +6414,13 @@ export default function GameBoard() {
         }
 
         if (card.type === 'potion') {
-          stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== card.id), card];
-          dispatch({ type: 'RESOLVE_POTION', cardId: card.id, card } as any);
+          const potionFromBag = backpackItems.find(c => c.id === card.id) ?? card;
+          stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== potionFromBag.id), potionFromBag];
+          dispatch({ type: 'RESOLVE_POTION', cardId: potionFromBag.id, card: potionFromBag } as any);
         } else if (card.type === 'magic' || card.type === 'hero-magic' || card.type === 'curse') {
-          stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== card.id), card];
-          dispatch({ type: 'RESOLVE_MAGIC', cardId: card.id, card } as any);
+          const magicFromBag = backpackItems.find(c => c.id === card.id) ?? card;
+          stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== magicFromBag.id), magicFromBag];
+          dispatch({ type: 'RESOLVE_MAGIC', cardId: magicFromBag.id, card: magicFromBag } as any);
         } else if (card.type === 'event') {
           startEventResolution(null, 'hand');
           const cleanedCard = card.eventChoices
@@ -7033,6 +7039,27 @@ export default function GameBoard() {
       const reserve = getEquipmentReserve(equipSlot);
       const totalEquipped = (equippedItem ? 1 : 0) + reserve.length;
 
+      const equipFromHand = isCardFromHand(card);
+      const handArrForFlank = handCardsRef.current;
+      const flankIdxForEquip = handArrForFlank.findIndex(c => c.id === card.id);
+      const isFlankEquipPlay =
+        equipFromHand
+        && flankIdxForEquip >= 0
+        && (flankIdxForEquip === 0 || flankIdxForEquip === handArrForFlank.length - 1);
+
+      // 顶替时必须先把手上的新装备从手牌拿掉，再 DISPOSE 旧装备遗言。
+      // 否则 Iron Shield `graveyard-to-hand` 读到的手牌仍含新装备，会误判手满
+      // 而把坟场牌塞进回收袋（与 reducePlayCard 先移除手牌再 dispose 对齐）。
+      const willDisplaceEquip =
+        totalEquipped >= slotCap && equippedItem != null && equippedItem.id !== card.id;
+      let handConsumedForEquipDisplace = false;
+      if (willDisplaceEquip && equipFromHand) {
+        if (!consumeCardFromHand(card)) {
+          return;
+        }
+        handConsumedForEquipDisplace = true;
+      }
+
       if (totalEquipped < slotCap) {
         if (equippedItem) {
           setEquipmentReserve(equipSlot, [...reserve, equippedItem]);
@@ -7136,18 +7163,17 @@ export default function GameBoard() {
       // 代码处理（在 dispatch 之前已经完成 SET_EQUIPMENT_SLOT 等）。
       dispatch({ type: 'EQUIP_FROM_HAND', card, slotId: equipSlot });
 
-      if (isCardFromHand(card)) {
-        const handArr = handCardsRef.current;
-        const flankIdx = handArr.findIndex(c => c.id === card.id);
-        const isFlank = flankIdx >= 0 && (flankIdx === 0 || flankIdx === handArr.length - 1);
-        lastPlayedFlankRef.current = isFlank;
+      if (equipFromHand) {
+        lastPlayedFlankRef.current = isFlankEquipPlay;
 
-        if (!consumeCardFromHand(card)) {
-          return;
+        if (!handConsumedForEquipDisplace) {
+          if (!consumeCardFromHand(card)) {
+            return;
+          }
         }
         tickRecycleForge();
 
-        if (isFlank && card.flankDraw) {
+        if (isFlankEquipPlay && card.flankDraw) {
           for (let i = 0; i < card.flankDraw; i++) {
             drawFromBackpackToHand();
           }
@@ -7155,7 +7181,7 @@ export default function GameBoard() {
           dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 抽取了 ${card.flankDraw} 张牌。` });
         }
 
-        if (isFlank && card.flankEffectId) {
+        if (isFlankEquipPlay && card.flankEffectId) {
           if (card.flankEffectId.startsWith('persuadeCost-')) {
             const amount = parseInt(card.flankEffectId.replace('persuadeCost-', ''), 10) || 1;
             const currentMod = engine.getState().persuadeCostModifier ?? 0;

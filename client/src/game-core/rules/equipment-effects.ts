@@ -21,7 +21,7 @@ import { applyAmplifyOnCreate } from '../helpers';
 import type { RngState } from '../rng';
 import { nextBool, nextInt } from '../rng';
 import { createBugletCard } from '../deck';
-import { resetCardForGraveyard, getEffectiveHandLimit } from '../cards';
+import { resetCardForGraveyard, getEffectiveHandLimit, getEffectiveBackpackCapacity } from '../cards';
 import { applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../equipment';
 import { createMineBuilding } from '@/lib/knightDeck';
 import { applyGainMagicBolts, formatGainMagicBoltsDistribution } from '../events';
@@ -372,6 +372,50 @@ interface OneLastWordsIterationResult {
   classCardDraw: number;
 }
 
+/**
+ * 「坟场抽入」类遗言（Iron Shield `graveyard-to-hand` / 生长之盾
+ * `graveyard-event-to-hand`）的落地顺序：手牌有空 → 手牌；否则背包有空 →
+ * `ADD_TO_BACKPACK`；否则回收袋。
+ */
+function routeGraveyardLastWordsPickedCard(
+  state: GameState,
+  patch: Partial<GameState>,
+  picked: GameCardData,
+  equipName: string,
+  sideEffects: SideEffect[],
+  enqueuedActions: GameAction[],
+): void {
+  const hand = (patch.handCards ?? state.handCards) as readonly GameCardData[];
+  const handLimit = getEffectiveHandLimit(state);
+  if (hand.length < handLimit) {
+    patch.handCards = [...hand, picked];
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'equip', message: `${equipName} 遗言：从坟场获得了「${picked.name}」！` },
+    });
+    sideEffects.push({ event: 'equipment:graveyardToHand', payload: { itemName: equipName } });
+    sideEffects.push({ event: 'card:newCardGained', payload: { count: 1, source: 'graveyard' } });
+    return;
+  }
+  const bp = (patch.backpackItems ?? state.backpackItems) as readonly GameCardData[];
+  const bpCap = getEffectiveBackpackCapacity(state);
+  if (bp.length < bpCap) {
+    enqueuedActions.push({ type: 'ADD_TO_BACKPACK', card: picked });
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'equip', message: `${equipName} 遗言：手牌已满，「${picked.name}」进入背包！` },
+    });
+    sideEffects.push({ event: 'equipment:graveyardToHand', payload: { itemName: equipName } });
+    return;
+  }
+  enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: picked });
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'equip', message: `${equipName} 遗言：手牌与背包已满，「${picked.name}」进入回收袋！` },
+  });
+  sideEffects.push({ event: 'equipment:graveyardToHand', payload: { itemName: equipName } });
+}
+
 function applyOneEquipmentLastWordsIteration(
   state: GameState,
   slotId: EquipmentSlotId,
@@ -650,34 +694,20 @@ function applyOneEquipmentLastWordsIteration(
         }
       }
     } else if (slotItem.onDestroyEffect === 'graveyard-to-hand') {
-      // Iron Shield: 遗言从坟场随机抽 1 张牌进手牌。手牌满时改路由到回收袋
-      // （比照 RETURN_EQUIPMENT_TO_HAND 「装备回手（满则回收袋）」约定，
-      //  rules/cards.ts:2046-2059）。回收袋路径不 emit `card:newCardGained`
-      // —— 跟 DRAW_CLASS_TO_BACKPACK overflow 行为一致（card-gain-missile
-      // 弹幕之符 不在「卡进回收袋」时触发）。
+      // Iron Shield: 遗言从坟场随机抽 1 张牌。手牌满 → 背包；背包满 → 回收袋。
       const graveyard = (patch.discardedCards ?? state.discardedCards) as readonly GameCardData[];
       const pick = pickGraveyardCardExcluding(graveyard, slotItem.id, rng);
       if (pick) {
         rng = pick.rng;
         patch.discardedCards = graveyard.filter((_, i) => i !== pick.idx);
-        const currentHand = (patch.handCards ?? state.handCards) as readonly GameCardData[];
-        const handLimit = getEffectiveHandLimit(state);
-        if (currentHand.length < handLimit) {
-          patch.handCards = [...currentHand, pick.picked];
-          sideEffects.push({
-            event: 'log:entry',
-            payload: { type: 'equip', message: `${slotItem.name} 遗言：从坟场获得了「${pick.picked.name}」！` },
-          });
-          sideEffects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });
-          sideEffects.push({ event: 'card:newCardGained', payload: { count: 1, source: 'graveyard' } });
-        } else {
-          enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: pick.picked });
-          sideEffects.push({
-            event: 'log:entry',
-            payload: { type: 'equip', message: `${slotItem.name} 遗言：手牌已满，「${pick.picked.name}」进入回收袋！` },
-          });
-          sideEffects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });
-        }
+        routeGraveyardLastWordsPickedCard(
+          state,
+          patch,
+          pick.picked,
+          slotItem.name,
+          sideEffects,
+          enqueuedActions,
+        );
       } else {
         sideEffects.push({
           event: 'log:entry',
@@ -687,14 +717,13 @@ function applyOneEquipmentLastWordsIteration(
     } else if (slotItem.onDestroyEffect === 'graveyard-event-to-hand') {
       // `onDestroyEventCount` 缺省 1（与基础卡 / Iron-Shield-style 单张抽取一致）；
       // 「生长之盾」L2 升级把此值提升为 3，循环抽取至坟场再无 Event 时停。
-      // 手牌满时按可用空间逐张分流：先填满手牌，剩余的进入回收袋
-      // （比照 graveyard-to-hand 的「手牌满则回收袋」约定）。
+      // 手牌满 → 背包；背包满 → 回收袋（与 graveyard-to-hand 一致）。
       const requested = Math.max(
         1,
         (slotItem as { onDestroyEventCount?: number }).onDestroyEventCount ?? 1,
       );
-      const handLimit = getEffectiveHandLimit(state);
       const pickedToHand: GameCardData[] = [];
+      const pickedToBackpack: GameCardData[] = [];
       const pickedToRecycle: GameCardData[] = [];
       for (let i = 0; i < requested; i++) {
         const graveyardSnapshot =
@@ -703,29 +732,53 @@ function applyOneEquipmentLastWordsIteration(
         if (!result) break;
         rng = result.rng;
         patch.discardedCards = graveyardSnapshot.filter((_, idx) => idx !== result.idx);
-        const currentHand = (patch.handCards ?? state.handCards) as readonly GameCardData[];
-        if (currentHand.length < handLimit) {
-          patch.handCards = [...currentHand, result.picked];
+        const hand = (patch.handCards ?? state.handCards) as readonly GameCardData[];
+        const handLimit = getEffectiveHandLimit(state);
+        if (hand.length < handLimit) {
+          patch.handCards = [...hand, result.picked];
           pickedToHand.push(result.picked);
         } else {
-          enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: result.picked });
-          pickedToRecycle.push(result.picked);
+          const bp = (patch.backpackItems ?? state.backpackItems) as readonly GameCardData[];
+          const bpCap = getEffectiveBackpackCapacity(state);
+          if (bp.length < bpCap) {
+            enqueuedActions.push({ type: 'ADD_TO_BACKPACK', card: result.picked });
+            pickedToBackpack.push(result.picked);
+          } else {
+            enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: result.picked });
+            pickedToRecycle.push(result.picked);
+          }
         }
       }
-      const totalPicked = pickedToHand.length + pickedToRecycle.length;
+      const totalPicked = pickedToHand.length + pickedToBackpack.length + pickedToRecycle.length;
       if (totalPicked > 0) {
         const handNames = pickedToHand.map(c => `「${c.name}」`).join('、');
+        const bpNames = pickedToBackpack.map(c => `「${c.name}」`).join('、');
         const recycleNames = pickedToRecycle.map(c => `「${c.name}」`).join('、');
         let message: string;
-        if (pickedToRecycle.length === 0) {
+        if (pickedToBackpack.length === 0 && pickedToRecycle.length === 0) {
           message =
             pickedToHand.length === 1
               ? `${slotItem.name} 遗言：从坟场抽出 Event ${handNames}！`
               : `${slotItem.name} 遗言：从坟场抽出 ${pickedToHand.length} 张 Event ${handNames}！`;
-        } else if (pickedToHand.length === 0) {
-          message = `${slotItem.name} 遗言：手牌已满，${pickedToRecycle.length} 张 Event ${recycleNames} 进入回收袋！`;
+        } else if (pickedToHand.length === 0 && pickedToRecycle.length === 0) {
+          message =
+            pickedToBackpack.length === 1
+              ? `${slotItem.name} 遗言：手牌已满，Event ${bpNames} 进入背包！`
+              : `${slotItem.name} 遗言：手牌已满，${pickedToBackpack.length} 张 Event ${bpNames} 进入背包！`;
+        } else if (pickedToHand.length === 0 && pickedToBackpack.length === 0) {
+          message = `${slotItem.name} 遗言：手牌与背包已满，${pickedToRecycle.length} 张 Event ${recycleNames} 进入回收袋！`;
         } else {
-          message = `${slotItem.name} 遗言：${pickedToHand.length} 张 ${handNames} 入手牌，${pickedToRecycle.length} 张 ${recycleNames} 进入回收袋！`;
+          const parts: string[] = [];
+          if (pickedToHand.length > 0) {
+            parts.push(`${pickedToHand.length} 张 ${handNames} 入手牌`);
+          }
+          if (pickedToBackpack.length > 0) {
+            parts.push(`${pickedToBackpack.length} 张 ${bpNames} 入背包`);
+          }
+          if (pickedToRecycle.length > 0) {
+            parts.push(`${pickedToRecycle.length} 张 ${recycleNames} 入回收袋`);
+          }
+          message = `${slotItem.name} 遗言：${parts.join('，')}！`;
         }
         sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message } });
         sideEffects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });

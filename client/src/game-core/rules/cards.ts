@@ -1377,7 +1377,9 @@ function reduceFinalizePotionCard(
       event: 'card:potionFlipRequested',
       payload: { card },
     });
-  } else if (card.recycleDelay != null && card.recycleDelay > 0) {
+  } else if (card.permStripped) {
+    enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card });
+  } else if (cardHasPermFlag(card)) {
     enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card });
   } else {
     enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card });
