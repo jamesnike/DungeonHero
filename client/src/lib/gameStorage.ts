@@ -114,7 +114,7 @@ export interface PersistedGameState {
   recycleForgePlayCount?: number;
   /** 战伤刻印：已造成伤害次数 streak 0–9 */
   classDamageDiscoverStreak?: number;
-  /** 咒纹刻印：已使用「功能上瞬发」的 magic 牌次数 streak 0–5（!cardHasPermFlag） */
+  /** 咒纹刻印：已使用「功能上瞬发」的 magic 牌次数 streak 0–3（!cardHasPermFlag；达 4 触发发现后归零） */
   classMagicDiscoverStreak?: number;
   /** 影摹召引符：累计标准抽牌数 streak 0–7（达 8 触发产出镜影摹形后 %= 8） */
   mirrorCopySummonStreak?: number;

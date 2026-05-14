@@ -140,7 +140,11 @@ export interface CardPlayHandlersDeps {
   addGameLog: (type: LogEntryType, message: string) => void;
   pushUndoSnapshot: () => void;
   clearUndoStack: () => void;
-  removeCard: (cardId: string, animate: boolean, opts?: { skipAutoDraw?: boolean }) => void;
+  removeCard: (
+    cardId: string,
+    animate: boolean,
+    opts?: { skipAutoDraw?: boolean; afterActiveRemoval?: () => void },
+  ) => void;
   removePendingDungeonCard: (cardId: string) => boolean;
   queueCardIntoHand: (card: GameCardData, sourceHint?: FlightSourceHint) => void;
   triggerDiscardFlight: (

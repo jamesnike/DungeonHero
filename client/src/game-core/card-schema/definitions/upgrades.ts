@@ -193,10 +193,10 @@ const attackPersuadeAmulet: OnUpgradeHandler = noopUpgrade;
 const cardGainMissileAmulet: OnUpgradeHandler = noopUpgrade;
 
 // `_counterDisplay` is a live state-derived field that the formatter does not
-// own; the handler keeps the assignment. Threshold on upgrade is 6 (matches
+// own; the handler keeps the assignment. Threshold on upgrade is 4 (matches
 // combat.ts / economy.ts trigger logic).
 const damageClassDiscoverAmulet: OnUpgradeHandler = (upgraded, _newLevel, state) => {
-  upgraded._counterDisplay = `${state.classDamageDiscoverStreak ?? 0}/6`;
+  upgraded._counterDisplay = `${state.classDamageDiscoverStreak ?? 0}/4`;
 };
 
 const stunUpgradeCapAmulet: OnUpgradeHandler = noopUpgrade;

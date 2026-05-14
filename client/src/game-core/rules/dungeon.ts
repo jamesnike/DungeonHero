@@ -406,6 +406,8 @@ function reduceEnforceBackpackCapacity(state: GameState): ReduceResult {
 
 // ---------------------------------------------------------------------------
 // CHECK_WRAITH_PURIFICATION — after combat, check if wraith passive conditions met
+// (Also dispatched from GameBoard after a Wraith is successfully persuaded and
+// removed from the active row — same clearance test as defeat.)
 // ---------------------------------------------------------------------------
 
 function reduceCheckWraithPurification(state: GameState): ReduceResult {

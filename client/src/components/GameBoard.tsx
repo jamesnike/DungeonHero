@@ -4195,11 +4195,11 @@ export default function GameBoard() {
         };
       }
       if (slot?.amuletEffect === 'damage-class-discover') {
-        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 6 : 8;
+        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 4 : 6;
         return { ...slot, _counterDisplay: `${savedDamageStreak}/${threshold}` };
       }
       if (slot?.amuletEffect === 'magic-class-discover') {
-        return { ...slot, _counterDisplay: `${savedMagicStreak}/5` };
+        return { ...slot, _counterDisplay: `${savedMagicStreak}/4` };
       }
       if (slot?.amuletEffect === 'monster-kill-upgrade') {
         const killProgress = snapshot.monsterKillUpgradeProgress ?? 0;
@@ -5606,7 +5606,7 @@ export default function GameBoard() {
   const removeCard = (
     cardId: string,
     addToGraveyardAutomatically: boolean = true,
-    options?: { skipAutoDraw?: boolean },
+    options?: { skipAutoDraw?: boolean; afterActiveRemoval?: () => void },
   ) => {
     logWaterfall('remove-request', {
       cardId,
@@ -5736,6 +5736,8 @@ export default function GameBoard() {
 
         return updated;
       } });
+
+      options?.afterActiveRemoval?.();
 
       // Buglet engagement is driven by the reducer's `combat:autoEngage` side
       // effect (see useCombatActions). Horde rage banner + buffs are driven
@@ -6678,7 +6680,17 @@ export default function GameBoard() {
           maxDurability: monsterMaxDurability,
         };
         addCardToBackpack(persuadedCard, { pendingDungeonCardId: monster.id });
-        removeCard(monster.id, false);
+        removeCard(
+          monster.id,
+          false,
+          monster.monsterType === 'Wraith'
+            ? {
+                afterActiveRemoval: () => {
+                  dispatch({ type: 'CHECK_WRAITH_PURIFICATION' });
+                },
+              }
+            : undefined,
+        );
         addGameLog('combat', `劝降成功！${monster.name} 加入背包（${monsterAttack}攻 / ${monsterArmor}防 / ${monsterStartDurability}/${monsterMaxDurability}耐久）`);
         dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `劝降成功！${monster.name} 已加入背包！` });
       } else {
@@ -6714,7 +6726,17 @@ export default function GameBoard() {
           maxDurability: monsterMaxDurability,
         } as EquipmentItem;
         setEquipmentSlotById(equipSlot, equipCard);
-        removeCard(monster.id, false);
+        removeCard(
+          monster.id,
+          false,
+          monster.monsterType === 'Wraith'
+            ? {
+                afterActiveRemoval: () => {
+                  dispatch({ type: 'CHECK_WRAITH_PURIFICATION' });
+                },
+              }
+            : undefined,
+        );
         addGameLog('combat', `劝降成功！装备 ${monster.name}（${monsterAttack}攻 / ${monsterArmor}防 / ${monsterStartDurability}/${monsterMaxDurability}耐久）`);
         dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `劝降成功！${monster.name} 已装备！` });
 
@@ -6857,12 +6879,12 @@ export default function GameBoard() {
       }
       if (card.amuletEffect === 'damage-class-discover') {
         const streak = engine.getState().classDamageDiscoverStreak ?? 0;
-        const threshold = (card.upgradeLevel ?? 0) >= 1 ? 6 : 8;
+        const threshold = (card.upgradeLevel ?? 0) >= 1 ? 4 : 6;
         updateDamageDiscoverCounter(streak, threshold);
       }
       if (card.amuletEffect === 'magic-class-discover') {
         const streak = engine.getState().classMagicDiscoverStreak ?? 0;
-        updateMagicDiscoverCounter(streak, 8);
+        updateMagicDiscoverCounter(streak, 4);
       }
       if (card.amuletEffect === 'swap-upgrade') {
         const prog = engine.getState().swapUpgradeProgress ?? 0;

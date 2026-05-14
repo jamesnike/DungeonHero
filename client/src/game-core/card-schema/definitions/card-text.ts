@@ -161,9 +161,9 @@ const cardGainMissileAmulet: CardTextFormatter = () => ({
 // and stays in the on-upgrade handler.
 // Single source of truth: thresholds here MUST match `combat.ts` /
 // `economy.ts` / `reducer.ts:computeAmuletCounterDisplay` / `GameBoard.tsx`
-// counter-display branches (Lv 0 = 8, Lv 1+ = 6).
+// counter-display branches (Lv 0 = 6, Lv 1+ = 4).
 const damageClassDiscoverAmulet: CardTextFormatter = (card) => {
-  const threshold = (card.upgradeLevel ?? 0) >= 1 ? 6 : 8;
+  const threshold = (card.upgradeLevel ?? 0) >= 1 ? 4 : 6;
   return {
     description: `每造成 ${threshold} 次伤害（武器、护符、法术等任意来源），发现一张专属牌。`,
     shortDescription: `每造成 ${threshold} 次伤害：发现 1 张专属`,

@@ -154,7 +154,11 @@ export interface EventSystemDeps {
   addGameLog: (type: LogEntryType, message: string) => void;
   pushUndoSnapshot: () => void;
   clearUndoStack: () => void;
-  removeCard: (cardId: string, animate: boolean, opts?: { skipAutoDraw?: boolean }) => void;
+  removeCard: (
+    cardId: string,
+    animate: boolean,
+    opts?: { skipAutoDraw?: boolean; afterActiveRemoval?: () => void },
+  ) => void;
   triggerClassDeckFlight: (cards: GameCardData[]) => void;
   triggerMonsterBleedAnimation: (monsterId: string, delay?: number) => void;
   dragonBleedDestroyEquipment: (monsterName: string, remainingLayers: number) => void;

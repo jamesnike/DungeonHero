@@ -540,7 +540,7 @@ export interface GameCardData {
   // Stripped on equip (SET_EQUIPMENT_SLOT) so each fresh equip restores the
   // one use. See `combat.ts:reduceResolveBlock` and the `iron-tower-fullblock-one-time` test.
   _fullBlockUsed?: boolean;
-  _counterDisplay?: string; // Dynamic counter text shown on card (e.g. "2/5")
+  _counterDisplay?: string; // Dynamic counter text shown on card (e.g. "2/4")
   blockGrantTempArmorToOther?: boolean; // On block, grant temp armor equal to shield value to other slot
   onDestroyDraw?: number; // Draw this many cards from backpack when this equipment is destroyed
   onDestroyClassDraw?: number; // Draw this many class cards to backpack when this equipment is destroyed

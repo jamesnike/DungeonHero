@@ -1217,7 +1217,7 @@ describe('reducer', () => {
       const result = reduce(state, {
         type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: 'm1', damage: 2, source: 'spell',
       });
-      // Threshold (unupgraded) = 8; streak 3 → 4 should NOT trigger.
+      // Threshold (unupgraded) = 6; streak 3 → 4 should NOT trigger.
       expect(result.state.classDamageDiscoverStreak).toBe(4);
       expect(result.sideEffects.some(e => e.event === 'combat:classDamageDiscoverTriggered')).toBe(false);
     });
@@ -1229,13 +1229,13 @@ describe('reducer', () => {
       const discoverAmulet = { id: 'a1', type: 'amulet' as const, name: 'Discover', value: 0, amuletEffect: 'damage-class-discover' };
       const state = makeState({
         activeCards: slots,
-        classDamageDiscoverStreak: 7,
+        classDamageDiscoverStreak: 5,
         amuletSlots: [discoverAmulet as any],
       });
       const result = reduce(state, {
         type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: 'm1', damage: 2, source: 'spell',
       });
-      // Threshold (unupgraded) = 8; streak 7 → 8 should trigger and reset.
+      // Threshold (unupgraded) = 6; streak 5 → 6 should trigger and reset.
       expect(result.state.classDamageDiscoverStreak).toBe(0);
       expect(result.sideEffects.some(e => e.event === 'combat:classDamageDiscoverTriggered')).toBe(true);
     });
@@ -1353,27 +1353,27 @@ describe('reducer', () => {
       const state = makeState({
         handCards: [magicCard as any],
         amuletSlots: [discoverAmulet as any],
-        classMagicDiscoverStreak: 3,
+        classMagicDiscoverStreak: 2,
       });
       // Drain the full pipeline so the enqueued RESOLVE_MAGIC actually runs
       // (PLAY_CARD only enqueues; the streak now lives on RESOLVE_MAGIC).
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'mg1' } as GameAction]);
-      expect(result.state.classMagicDiscoverStreak).toBe(4);
+      expect(result.state.classMagicDiscoverStreak).toBe(3);
       expect(result.sideEffects.some(e => e.event === 'combat:classMagicDiscoverTriggered')).toBe(false);
     });
 
-    it('PLAY_CARD: resets to 0 and emits classMagicDiscoverTriggered when threshold (5) is reached', () => {
+    it('PLAY_CARD: resets to 0 and emits classMagicDiscoverTriggered when threshold (4) is reached', () => {
       const state = makeState({
         handCards: [magicCard as any],
         amuletSlots: [discoverAmulet as any],
-        classMagicDiscoverStreak: 4,
+        classMagicDiscoverStreak: 3,
       });
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'mg1' } as GameAction]);
-      // Threshold = 5; streak 4 → 5 should trigger and reset.
+      // Threshold = 4; streak 3 → 4 should trigger and reset.
       expect(result.state.classMagicDiscoverStreak).toBe(0);
       const triggered = result.sideEffects.find(e => e.event === 'combat:classMagicDiscoverTriggered');
       expect(triggered).toBeDefined();
-      expect((triggered?.payload as any)?.threshold).toBe(5);
+      expect((triggered?.payload as any)?.threshold).toBe(4);
     });
 
     it('PLAY_CARD: does not increment when a Permanent magic card is played', () => {
@@ -1403,19 +1403,19 @@ describe('reducer', () => {
       // 会直接 dispatch RESOLVE_MAGIC 绕过 PLAY_CARD。Streak 必须在这条路径上也增加。
       const state = makeState({
         amuletSlots: [discoverAmulet as any],
-        classMagicDiscoverStreak: 3,
+        classMagicDiscoverStreak: 2,
       });
       const result = reduce(state, { type: 'RESOLVE_MAGIC', cardId: 'mg1', card: magicCard } as any);
-      expect(result.state.classMagicDiscoverStreak).toBe(4);
+      expect(result.state.classMagicDiscoverStreak).toBe(3);
     });
 
     it('RESOLVE_MAGIC (drag-to-hero path): resets to 0 and emits trigger at threshold', () => {
       const state = makeState({
         amuletSlots: [discoverAmulet as any],
-        classMagicDiscoverStreak: 4,
+        classMagicDiscoverStreak: 3,
       });
       const result = reduce(state, { type: 'RESOLVE_MAGIC', cardId: 'mg1', card: magicCard } as any);
-      // Threshold = 5; streak 4 → 5 should trigger and reset.
+      // Threshold = 4; streak 3 → 4 should trigger and reset.
       expect(result.state.classMagicDiscoverStreak).toBe(0);
       expect(result.sideEffects.some(e => e.event === 'combat:classMagicDiscoverTriggered')).toBe(true);
     });
@@ -1478,13 +1478,13 @@ describe('reducer', () => {
       };
       const state = makeState({
         amuletSlots: [discoverAmulet as any],
-        classMagicDiscoverStreak: 3,
+        classMagicDiscoverStreak: 2,
       });
       const result = reduce(
         state,
         { type: 'RESOLVE_MAGIC', cardId: 'perm-stripped', card: strippedPermanent } as any,
       );
-      expect(result.state.classMagicDiscoverStreak).toBe(4);
+      expect(result.state.classMagicDiscoverStreak).toBe(3);
     });
 
     it('does not double-count when PLAY_CARD enqueues RESOLVE_MAGIC (single drain = +1, not +2)', () => {

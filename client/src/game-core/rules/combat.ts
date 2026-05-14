@@ -100,7 +100,7 @@ function markMonsterDefeatAnimation(
  *
  * Each equipped damage-class-discover amulet ticks the counter independently
  * (N amulets → +N progress per qualifying hit). Threshold uses the highest
- * upgradeLevel among equipped amulets (level ≥ 1 → 6, otherwise 8).
+ * upgradeLevel among equipped amulets (level ≥ 1 → 4, otherwise 6).
  *
  * **Single source of truth**: combat reducers that deal damage to a monster
  * (`DEAL_DAMAGE_TO_MONSTER` / `APPLY_SHIELD_REFLECT` / `PERFORM_HERO_ATTACK`)
@@ -121,7 +121,7 @@ function applyClassDamageDiscoverTick(
   const currentStreak = patch.classDamageDiscoverStreak ?? state.classDamageDiscoverStreak ?? 0;
   const streak = currentStreak + discoverAmulets.length;
   const maxUpgradeLevel = Math.max(...discoverAmulets.map(a => a.upgradeLevel ?? 0));
-  const threshold = maxUpgradeLevel >= 1 ? 6 : 8;
+  const threshold = maxUpgradeLevel >= 1 ? 4 : 6;
   if (streak >= threshold) {
     patch.classDamageDiscoverStreak = 0;
     sideEffects.push({ event: 'combat:classDamageDiscoverTriggered', payload: { threshold } });

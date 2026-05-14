@@ -131,7 +131,11 @@ export interface HeroActionsDeps {
   addGameLog: (type: LogEntryType, message: string) => void;
   pushUndoSnapshot: () => void;
   clearUndoStack: () => void;
-  removeCard: (cardId: string, animate: boolean, opts?: { skipAutoDraw?: boolean }) => void;
+  removeCard: (
+    cardId: string,
+    animate: boolean,
+    opts?: { skipAutoDraw?: boolean; afterActiveRemoval?: () => void },
+  ) => void;
   removePendingDungeonCard: (cardId: string) => boolean;
   triggerClassDeckFlight: (cards: GameCardData[]) => void;
   triggerFateSwapFlight: (activeSlotIdx: number, oldCard: GameCardData, newCard: GameCardData) => void;

@@ -343,7 +343,7 @@ export interface GameState {
   recycleForgePlayCount: number;
   /** 战伤刻印：0–9，累计 10 次造成伤害触发发现专属牌后归零 */
   classDamageDiscoverStreak: number;
-  /** 咒纹刻印：0–4，累计 5 次使用「当前功能上是瞬发」的 magic 牌（type === 'magic' 且 !cardHasPermFlag — 即原生 Instant 未被永恒铭刻、或 Permanent 已被凡化咒剥离）触发发现专属牌后归零 */
+  /** 咒纹刻印：0–3，累计 4 次使用「当前功能上是瞬发」的 magic 牌（type === 'magic' 且 !cardHasPermFlag — 即原生 Instant 未被永恒铭刻、或 Permanent 已被凡化咒剥离）触发发现专属牌后归零 */
   classMagicDiscoverStreak: number;
   /** 影摹召引符：每抽 8 张「标准抽牌」（DRAW_CARDS source: backpack|deck 或
    *  DRAW_FROM_BACKPACK）触发，产出 1 张「镜影摹形」入手；触发后 streak %= 8 保留 remainder。

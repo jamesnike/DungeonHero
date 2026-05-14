@@ -2,7 +2,7 @@
  * 潮愈之符 (`waterfall-heal` amulet) — starter pool amulet.
  *
  * Behavior contract (current design):
- *   - Each equipped 潮愈之符 contributes ⌊recycleBagSize / 4⌋ HP at the start of
+ *   - Each equipped 潮愈之符 contributes ⌊recycleBagSize / 3⌋ HP at the start of
  *     `APPLY_WATERFALL_EFFECTS` (linear ×N stacking before the heal multiplier).
  *   - Recycle-bag size is sampled from the **pre-wash** snapshot — i.e. before
  *     `processRecycleBag` ticks `_recycleWaits` and pulls ready cards back to
@@ -14,7 +14,7 @@
  *   - Independent of the relic 永恒护符·潮涌回春 (`waterfall-heal` relic) which
  *     still heals a flat 4 HP — a player with both gets two separate `HEAL`
  *     actions enqueued (additive, not multiplicative).
- *   - When `⌊recycleBagSize / 4⌋ * waterfallHealCount === 0`, no `HEAL` action is
+ *   - When `⌊recycleBagSize / 3⌋ * waterfallHealCount === 0`, no `HEAL` action is
  *     enqueued and no log line is emitted (silent no-op).
  *   - Heal is capped by `maxHp` via `computeHeal`, so over-heal is silently absorbed.
  */
@@ -97,10 +97,10 @@ describe('starter amulet: 潮愈之符 (waterfall-heal — recycle-bag-driven)',
     expect(result.state.hp).toBe(10);
   });
 
-  it('1 amulet, bag has 3 → ⌊3/4⌋=0 → no heal', () => {
+  it('1 amulet, bag has 2 → ⌊2/3⌋=0 → no heal', () => {
     const state = makeState({
       amuletSlots: [waterfallHealAmulet('a1')] as any,
-      permanentMagicRecycleBag: bagOf(3),
+      permanentMagicRecycleBag: bagOf(2),
     });
 
     const result = drain(state, [{ type: 'APPLY_WATERFALL_EFFECTS' } as GameAction]);
@@ -108,7 +108,18 @@ describe('starter amulet: 潮愈之符 (waterfall-heal — recycle-bag-driven)',
     expect(result.state.hp).toBe(10);
   });
 
-  it('1 amulet, bag has 4 → ⌊4/4⌋=1 → +1 HP', () => {
+  it('1 amulet, bag has 3 → ⌊3/3⌋=1 → +1 HP', () => {
+    const state = makeState({
+      amuletSlots: [waterfallHealAmulet('a1')] as any,
+      permanentMagicRecycleBag: bagOf(3),
+    });
+
+    const result = drain(state, [{ type: 'APPLY_WATERFALL_EFFECTS' } as GameAction]);
+
+    expect(result.state.hp).toBe(11);
+  });
+
+  it('1 amulet, bag has 4 → ⌊4/3⌋=1 → +1 HP', () => {
     const state = makeState({
       amuletSlots: [waterfallHealAmulet('a1')] as any,
       permanentMagicRecycleBag: bagOf(4),
@@ -119,7 +130,7 @@ describe('starter amulet: 潮愈之符 (waterfall-heal — recycle-bag-driven)',
     expect(result.state.hp).toBe(11);
   });
 
-  it('1 amulet, bag has 11 → ⌊11/4⌋=2 → +2 HP', () => {
+  it('1 amulet, bag has 11 → ⌊11/3⌋=3 → +3 HP', () => {
     const state = makeState({
       amuletSlots: [waterfallHealAmulet('a1')] as any,
       permanentMagicRecycleBag: bagOf(11),
@@ -127,10 +138,10 @@ describe('starter amulet: 潮愈之符 (waterfall-heal — recycle-bag-driven)',
 
     const result = drain(state, [{ type: 'APPLY_WATERFALL_EFFECTS' } as GameAction]);
 
-    expect(result.state.hp).toBe(12);
+    expect(result.state.hp).toBe(13);
   });
 
-  it('2 amulets, bag has 4 → 2 × ⌊4/4⌋=2 → +2 HP (linear ×N stacking)', () => {
+  it('2 amulets, bag has 4 → 2 × ⌊4/3⌋=2 → +2 HP (linear ×N stacking)', () => {
     const state = makeState({
       amuletSlots: [waterfallHealAmulet('a1'), waterfallHealAmulet('a2')] as any,
       permanentMagicRecycleBag: bagOf(4),
@@ -141,7 +152,7 @@ describe('starter amulet: 潮愈之符 (waterfall-heal — recycle-bag-driven)',
     expect(result.state.hp).toBe(12);
   });
 
-  it('3 amulets, bag has 8 → 3 × ⌊8/4⌋=6 → +6 HP', () => {
+  it('3 amulets, bag has 8 → 3 × ⌊8/3⌋=6 → +6 HP', () => {
     const state = makeState({
       amuletSlots: [
         waterfallHealAmulet('a1'),
@@ -156,7 +167,7 @@ describe('starter amulet: 潮愈之符 (waterfall-heal — recycle-bag-driven)',
     expect(result.state.hp).toBe(16);
   });
 
-  it('1 amulet + 1 heal-amulet, bag has 4 → ⌊4/4⌋=1, ×2^1 = +2 HP', () => {
+  it('1 amulet + 1 heal-amulet, bag has 4 → ⌊4/3⌋=1, ×2^1 = +2 HP', () => {
     const state = makeState({
       amuletSlots: [waterfallHealAmulet('a1'), healAmulet('h1')] as any,
       permanentMagicRecycleBag: bagOf(4),
@@ -182,7 +193,7 @@ describe('starter amulet: 潮愈之符 (waterfall-heal — recycle-bag-driven)',
     expect(result.state.hp).toBe(14);
   });
 
-  it('1 amulet + 2 heal-amulets, bag has 8 → 1 × 2 × 2^2 = +8 HP', () => {
+  it('1 amulet + 2 heal-amulets, bag has 8 → 1 × ⌊8/3⌋ × 2^2 = +8 HP', () => {
     const state = makeState({
       amuletSlots: [
         waterfallHealAmulet('a1'),
@@ -197,7 +208,7 @@ describe('starter amulet: 潮愈之符 (waterfall-heal — recycle-bag-driven)',
     expect(result.state.hp).toBe(18);
   });
 
-  it('amulet + relic, bag has 4 → relic +4 HP, amulet +1 HP, total +5 (additive independent)', () => {
+  it('amulet + relic, bag has 4 → relic +4 HP, amulet ⌊4/3⌋ +1 HP, total +5 (additive independent)', () => {
     const state = makeState({
       amuletSlots: [waterfallHealAmulet('a1')] as any,
       eternalRelics: [waterfallHealRelic] as any,
@@ -209,7 +220,7 @@ describe('starter amulet: 潮愈之符 (waterfall-heal — recycle-bag-driven)',
     expect(result.state.hp).toBe(15);
   });
 
-  it('amulet + relic + heal-mul, bag has 4 → relic 4×2 + amulet 1×2 = +10', () => {
+  it('amulet + relic + heal-mul, bag has 4 → relic 4×2 + amulet ⌊4/3⌋×2 = +10', () => {
     const state = makeState({
       amuletSlots: [waterfallHealAmulet('a1'), healAmulet('h1')] as any,
       eternalRelics: [waterfallHealRelic] as any,
@@ -259,7 +270,7 @@ describe('starter amulet: 潮愈之符 (waterfall-heal — recycle-bag-driven)',
   });
 
   it('partial overflow → heal only fills to maxHp', () => {
-    // 1 amulet + 1 heal-amulet, bag 16 → ⌊16/4⌋=4, ×2 = 8 base. hp 57 / max 60 → +3 capped.
+    // 1 amulet + 1 heal-amulet, bag 16 → ⌊16/3⌋=5, ×2 = 10 base. hp 57 / max 60 → +3 capped.
     const state = makeState({
       hp: 57,
       amuletSlots: [waterfallHealAmulet('a1'), healAmulet('h1')] as any,
@@ -295,7 +306,7 @@ describe('starter amulet: 潮愈之符 (waterfall-heal — recycle-bag-driven)',
   it('heal samples recycle-bag size BEFORE processRecycleBag washes ready cards back', () => {
     // 4 cards with _recycleWaits=1 → all become ready this tick → after
     // processRecycleBag the bag is empty. If we sampled post-wash, heal would
-    // be 0; we expect +1 because the pre-wash size is 4.
+    // be 0; we expect +1 because the pre-wash size is 4 (⌊4/3⌋=1).
     const state = makeState({
       amuletSlots: [waterfallHealAmulet('a1')] as any,
       permanentMagicRecycleBag: bagOf(4, 1),
@@ -312,7 +323,7 @@ describe('starter amulet: 潮愈之符 (waterfall-heal — recycle-bag-driven)',
 
   it('heal samples pre-wash size with mixed waits (some ready, some still waiting)', () => {
     // 5 ready cards (waits=1) + 3 still waiting (waits=2) = 8 in bag pre-wash.
-    // Heal should be ⌊8/4⌋ = 2. After processRecycleBag the bag has 3 left.
+    // Heal should be ⌊8/3⌋ = 2. After processRecycleBag the bag has 3 left.
     const state = makeState({
       amuletSlots: [waterfallHealAmulet('a1')] as any,
       permanentMagicRecycleBag: [

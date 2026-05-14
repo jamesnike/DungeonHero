@@ -886,8 +886,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: knightSpellRuneInscriptionAmuletImage,
     classCard: true,
-    description: '每使用 5 张瞬发魔法（Instant magic），发现一张专属牌。',
-    shortDescription: '每使用 5 张瞬发魔法，发现 1 张专属',
+    description: '每使用 4 张瞬发魔法（Instant magic），发现一张专属牌。',
+    shortDescription: '每使用 4 张瞬发魔法，发现 1 张专属',
     amuletEffect: 'magic-class-discover',
   });
 
@@ -1070,7 +1070,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: starterAmuletDamageDiscoverImage,
     classCard: true,
     amuletEffect: 'damage-class-discover',
-    shortDescription: '每造成 8 次伤害：发现 1 张专属',
+    shortDescription: '每造成 6 次伤害：发现 1 张专属',
   });
 
   pushAmulet({
@@ -1125,8 +1125,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: starterAmuletWaterfallHealImage,
     classCard: true,
     amuletEffect: 'waterfall-heal',
-    description: '每次瀑流推进时，恢复 ⌊回收袋张数 ÷ 4⌋ 点生命（多个叠加：每件独立计算）。计算发生在牌洗回背包之前。',
-    shortDescription: '每次瀑流：恢复 ⌊回收袋÷4⌋ 生命（叠加）',
+    description: '每次瀑流推进时，恢复 ⌊回收袋张数 ÷ 3⌋ 点生命（多个叠加：每件独立计算）。计算发生在牌洗回背包之前。',
+    shortDescription: '每次瀑流：恢复 ⌊回收袋÷3⌋ 生命（叠加）',
   });
 
   pushAmulet({

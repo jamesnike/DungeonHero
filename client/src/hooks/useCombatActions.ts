@@ -117,7 +117,11 @@ export interface CombatActionsDeps {
     options?: { title?: string; description?: string; handOnly?: boolean; moveToDestination?: 'recycle-bag' | 'graveyard' },
   ) => Promise<number>;
   queueMonsterReward: (monster: GameCardData) => boolean;
-  removeCard: (cardId: string, animate: boolean) => void;
+  removeCard: (
+    cardId: string,
+    animate: boolean,
+    opts?: { skipAutoDraw?: boolean; afterActiveRemoval?: () => void },
+  ) => void;
   markDungeonCardPendingUse: (cardId: string) => void;
   pushUndoSnapshot: () => void;
   clearUndoStack: () => void;

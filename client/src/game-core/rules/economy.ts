@@ -391,7 +391,7 @@ export function reduceEconomyActions(
       if (discoverAmulets.length === 0) return applyPatch(state, {});
 
       const anyUpgraded = discoverAmulets.some(a => (a.upgradeLevel ?? 0) >= 1);
-      const threshold = anyUpgraded ? 6 : 8;
+      const threshold = anyUpgraded ? 4 : 6;
       const nextStreak = (state.classDamageDiscoverStreak ?? 0) + discoverAmulets.length;
       const sideEffects: SideEffect[] = [];
 

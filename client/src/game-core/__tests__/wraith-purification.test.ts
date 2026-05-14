@@ -5,6 +5,9 @@
  *     idempotent once granted.
  *  2. `MONSTER_DEFEATED` enqueues `CHECK_WRAITH_PURIFICATION` after a wraith
  *     dies (and not for non-wraith kills).
+ *  2b. Persuade success for a Wraith: `GameBoard` `removeCard(..., { afterActiveRemoval })`
+ *     dispatches `CHECK_WRAITH_PURIFICATION` after the active-row removal
+ *     applies (same grant conditions as §1).
  *  3. `END_TURN` decrements `_recycleWaits` on a random floor(N/2)-sized
  *     subset of the recycle bag when (and only when) the relic is held.
  *     Cards whose counter hits 0 are immediately restored to the backpack

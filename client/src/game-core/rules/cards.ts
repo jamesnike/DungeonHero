@@ -1019,7 +1019,7 @@ function reduceResolveMagic(
 }
 
 // ---------------------------------------------------------------------------
-// 咒纹刻印 (magic-class-discover)：每使用 5 张「当前功能上是瞬发」的 magic 牌，
+// 咒纹刻印 (magic-class-discover)：每使用 4 张「当前功能上是瞬发」的 magic 牌，
 // 发现一张专属牌。判定标准是「现在打出去会进坟场」（!cardHasPermFlag），不是
 // 字面 magicType：
 //   - 原生 Instant magic 被 永恒铭刻 / 附魔祭坛 / 永恒铭刻药 加上 recycleDelay
@@ -1043,7 +1043,7 @@ function applyMagicClassDiscoverStreak(result: ReduceResult, card: GameCardData)
     s => s?.amuletEffect === 'magic-class-discover',
   ).length;
   if (magicDiscoverCount <= 0) return result;
-  const threshold = 5;
+  const threshold = 4;
   const nextStreak = (stateAfter.classMagicDiscoverStreak ?? 0) + magicDiscoverCount;
   if (nextStreak >= threshold) {
     return {

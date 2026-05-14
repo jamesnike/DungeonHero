@@ -407,16 +407,16 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
     });
   }
 
-  // Starter amulet: 潮愈之符 (`waterfall-heal`). 每件每次瀑流贡献 ⌊回收袋张数/4⌋ 点
+  // Starter amulet: 潮愈之符 (`waterfall-heal`). 每件每次瀑流贡献 ⌊回收袋张数/3⌋ 点
   // 治疗（线性 ×N 叠加），合并后传给 `reduceHeal`，再由其内部 `computeHeal` 套
   // 治疗护符 (`heal`) 的 `2^healCount` 复合倍乘。与永恒护符·潮涌回春独立结算。
   //
   // 计算时点：必须在 `processRecycleBag` 之前读 `state.permanentMagicRecycleBag.length`，
-  // 否则刚被洗回背包的卡缩水 → 玩家看到「回收袋里 4 张本该 +1，结果 +0」的语义错位。
+  // 否则刚被洗回背包的卡缩水 → 玩家看到「回收袋张数与恢复量不符」的语义错位。
   // 本块运行在下面 processRecycleBag 调用之前，state 是 input 快照 → 自然就是「洗回前」。
   if (amuletEffects.waterfallHealCount > 0) {
     const recycleBagSize = state.permanentMagicRecycleBag.length;
-    const perAmuletHeal = Math.floor(recycleBagSize / 4);
+    const perAmuletHeal = Math.floor(recycleBagSize / 3);
     const baseHeal = perAmuletHeal * amuletEffects.waterfallHealCount;
     if (baseHeal > 0) {
       const healMul = Math.pow(2, amuletEffects.healCount);

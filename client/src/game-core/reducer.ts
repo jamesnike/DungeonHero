@@ -445,11 +445,11 @@ function computeAmuletCounterDisplay(
 ): string | undefined {
   switch (slot.amuletEffect) {
     case 'damage-class-discover': {
-      const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 6 : 8;
+      const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 4 : 6;
       return `${state.classDamageDiscoverStreak ?? 0}/${threshold}`;
     }
     case 'magic-class-discover':
-      return `${state.classMagicDiscoverStreak ?? 0}/5`;
+      return `${state.classMagicDiscoverStreak ?? 0}/4`;
     case 'monster-kill-upgrade':
       return `${state.monsterKillUpgradeProgress ?? 0}/3`;
     case 'swap-upgrade':
